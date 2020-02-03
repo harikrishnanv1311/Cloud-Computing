@@ -381,12 +381,14 @@ def list_source_to_destination():
    
     response_from_api=req.json()["string"]
     resp1=response_from_api.split("\n")
+    #print(resp1)
     
     if(len(resp1)==1):
         return Response(status=204)
     s="[\n"
     for resp in resp1:
         resp2=resp[1:-1].split(",")
+        
         
         if(len(resp2)>1 and check_date(resp2[len(resp2)-3])):
             #print("content present")
@@ -395,7 +397,10 @@ def list_source_to_destination():
             #print(users)
             s=s+"{\n rideId : "+resp2[0]+"\n created_by : "+resp2[1]+"\n ride_users : "+users+"\n time_stamp : "+resp2[pt+1]+"\n source : "+resp2[pt+2]+"\n destination : "+resp2[pt+3]+"\n }"+",\n"
             #fin_list.append("{\n rideId : "+resp2[0]+"\n created_by : "+resp2[1]+"\n ride_users : "+users+"\n time_stamp : "+resp2[pt+1]+"\n source : "+resp2[pt+2]+"\n destination : "+resp2[pt+3]+"\n }")
-    return s[:-2]+"\n]"    
+    if(s=="[\n"):
+        return Response(status=400)
+    else:    
+        return s[:-2]+"\n]"    
 
 
 @app.route("/api/v1/rides/<rideId>",methods=["DELETE"])
