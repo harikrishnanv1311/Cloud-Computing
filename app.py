@@ -395,7 +395,9 @@ def list_source_to_destination():
             users=",".join(resp2[2:len(resp2)-3])
             pt=len(resp2)-4
             #print(users)
-            s=s+"{\n rideId : "+resp2[0]+"\n created_by : "+resp2[1]+"\n ride_users : "+users+"\n time_stamp : "+resp2[pt+1]+"\n source : "+resp2[pt+2]+"\n destination : "+resp2[pt+3]+"\n }"+",\n"
+            src=list(dicts.keys())[list(dicts.values()).index(resp2[pt+2])]
+            dst=list(dicts.keys())[list(dicts.values()).index(resp2[pt+3])]
+            s=s+"{\n rideId : "+resp2[0]+"\n created_by : "+resp2[1]+"\n ride_users : "+users+"\n time_stamp : "+resp2[pt+1]+"\n source : "+src+"\n destination : "+dst+"\n }"+",\n"
             #fin_list.append("{\n rideId : "+resp2[0]+"\n created_by : "+resp2[1]+"\n ride_users : "+users+"\n time_stamp : "+resp2[pt+1]+"\n source : "+resp2[pt+2]+"\n destination : "+resp2[pt+3]+"\n }")
     if(s=="[\n"):
         return Response(status=400)
