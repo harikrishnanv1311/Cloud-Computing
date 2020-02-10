@@ -38,10 +38,10 @@ app = Flask(__name__)
 
 def check_date(date):
     #29-01-2020:30-20-18
-    #print(date)
+    ##print(date)
     rem_quotes=date.replace("'","")
     rep_date=rem_quotes.replace(":","-").split("-")
-    #print(rep_date)
+    ##print(rep_date)
     rep_date1=[int(i) for i in rep_date]
     fin_date=datetime.datetime(rep_date1[2],rep_date1[1],rep_date1[0],rep_date1[5],rep_date1[4],rep_date1[3])
     cur_date=datetime.datetime.now()
@@ -49,10 +49,6 @@ def check_date(date):
         return 1
     else:
         return 0
-
-@app.route("/")
-def hello():
-    return "<h1 style='color:blue'>Hello There!</h1>"
 
 @app.route("/api/v1/db/write",methods=["POST"])
 def write_db():
@@ -62,7 +58,7 @@ def write_db():
     if(join==0):
         table=request.get_json()["table"]
         if(table=="users"):
-        #print(type(p))
+        ##print(type(p))
             try:
                 with sqlite3.connect("app.db") as con:
                     username=request.get_json()["username"]
@@ -73,7 +69,7 @@ def write_db():
                     con.commit()
                     return Response(status=201)
             except Exception as e:
-                    print(e)
+                    #print(e)
                     return Response(status=400)
 
                    
@@ -83,7 +79,7 @@ def write_db():
                 time_stamp=request.get_json()["time_stamp"]
                 source=request.get_json()["source"]
                 destination=request.get_json()["destination"]
-                print("Cunt")
+                
                 ride_users=""
            
 
@@ -91,27 +87,27 @@ def write_db():
 
                     cur = con.cursor()
                     #cur.execute("DELETE FROM rides WHERE created_by=\"'hk'\"")
-                    #print("\nBefore Insertion\n")
+                    ##print("\nBefore Insertion\n")
                     #query="INSERT INTO rides (rideId,created_by, ride_users, time_stamp, source, destination) values (None," + "'" + created_by + "'" + "," +  "'" + ride_users + "'" + "," + "'" + time_stamp + "'" + "," + "'" + source + "'" + "," + "'" + destination + "'" + ")"
-                    #print(query)
+                    ##print(query)
                     
-                    print(created_by,time_stamp,source,destination)
+                    #print(created_by,time_stamp,source,destination)
                     n=cur.execute("SELECT max(rideId) FROM rides").fetchone()[0]
                     if(n==None):
-                        print("Inside")
+                        #print("Inside")
                         m=0
                     else:
                         m = n
                     #m=cur.fetchone()[0]
-                    print(m)
+                    #print(m)
                     cur.execute("INSERT into rides (rideId,created_by,ride_users,time_stamp,source,destination) values (?,?,?,?,?,?)",(m+1,created_by,ride_users,time_stamp,source,destination))
-                    print("Surya Cunt")
+                    print("Surya")
                     con.commit()
                     status=201
                     return Response(status=201)
             except Exception as e:
                 print(e)
-                return Response(status=405)
+                return Response(status=400)
 
     if(join==1):
         try:
@@ -119,7 +115,7 @@ def write_db():
                 rideId = request.get_json()["rideId"]
                 username = request.get_json()["username"]
                 
-                #print(username)
+                ##print(username)
                 u=""
                 #check_rides_q = "SELECT COUNT(*) FROM rides WHERE rideId"+str(rideId)
                
@@ -181,7 +177,7 @@ def write_db():
     if(join==3):
         try:
             with sqlite3.connect("app.db") as con:
-                print("Connected")
+                #print("Connected")
                 username = request.get_json()["username"]
                 cur = con.cursor()
                 cur.execute("SELECT count(*) FROM users where username="+"'"+str(username)+"'")
@@ -189,7 +185,7 @@ def write_db():
                 con.commit()
                 if(user_flag):
                     cur.execute("DELETE FROM users WHERE username="+"'"+str(username)+"'")
-                    print("Executed")
+                    #print("Executed")
                     con.commit()
                     return Response(status=200)
                 else:
@@ -213,56 +209,55 @@ def read_db():
         cols+=i
         if(l!=0):
             cols+=","
-    print(cols)
-    print(type(cols))
+    #print(cols)
+    #print(type(cols))
     if(table=="users"):
-        #print(type(p))
+        ##print(type(p))
         try:
             with sqlite3.connect("app.db") as con:
                 #return "table is %s, username is %s, password is %s"%(table,u,p)
                 cur = con.cursor()
-                print("hi")
+                #print("hi")
                 if(where_flag):
                     where=request.get_json()["where"]
                     query="SELECT "+cols+" from users WHERE "+where
                 else:
                     query="SELECT "+cols+" from users"
-                print(query)
+                #print(query)
                 cur.execute(query)
-                print("hello")
+                #print("hello")
                 con.commit()
                 status=201
                 s=""
                 for i in cur:
                     s = s + str(i) + "\n"
-                    # print(type(i))
+                    # #print(type(i))
                 return jsonify({"string":s})
         except:
        
-                status=400
+               return Response(status=400)
     else:   #rides
         try:
             with sqlite3.connect("app.db") as con:
                 #return "table is %s, username is %s, password is %s"%(table,u,p)
                 cur = con.cursor()
-                print("BEFORE EXEC")
+                #print("BEFORE EXEC")
                 if(where_flag):
                     where=request.get_json()["where"]
                     query="SELECT "+cols+" from rides WHERE "+where
                 else:
                     query="SELECT "+cols+" from rides"
-                print(query)
+                #print(query)
                 cur.execute(query)
-                print("AFTER EXEC")
+                #print("AFTER EXEC")
                 con.commit()
                 status=201
                 s=""
                 for i in cur:
                     s = s + str(i) + "\n"
-                    # print(type(i))
                 return jsonify({"string":s})
         except:
-                status=400
+                return Response(status=400)
     return s
 
 
@@ -270,23 +265,26 @@ def read_db():
 def add_user():
     if(request.method=="PUT"):
         try:
-            #print("LOL")
+            ##print("LOL")
             username=request.get_json(force=True)["username"]
-            #print("yo")
+            ##print("yo")
             password=request.get_json()["password"]
-            #print(type(password))
+            ##print(type(password))
             string=password.lower()
-            # print(string)
+            # #print(string)
             x=re.findall("[g-z]",string)
-            # print(x)
+            # #print(x)
             flag=len(x)
-            #print("HERE",flag,len(password))
-            # print(flag)
+            ##print("HERE",flag,len(password))
+            # #print(flag)
             if(flag==0 and len(password)==40 and username!=""):
-                print("In")
+                #print("In")
                 data={"table":"users","username":username,"password":password,"join":0}
                 req=requests.post("http://54.209.210.47/api/v1/db/write",json=data)
-                return Response(status=req.status_code)
+                if(req.status_code==200):
+                      return Response(status=201)
+                else:
+                      return Response(status=req.status_code)
             else:
                 return Response(status=400)
 
@@ -314,15 +312,15 @@ def create_ride():
             for row in c:
                 dicts[row[0]]=row[1]
         
-        #print(dicts)
-        #print(type(request.get_json()))
+        ##print(dicts)
+        ##print(type(request.get_json()))
         created_by=request.get_json()["created_by"]
-        time_stamp=request.get_json()["time_stamp"]
+        time_stamp=request.get_json()["timestamp"]
         source=request.get_json()["source"]
         destination=request.get_json()["destination"]
         if(time.strptime(time_stamp, '%d-%m-%Y:%S-%M-%H')):
             data = {"join":0,"table":"rides","created_by":created_by,"time_stamp":time_stamp,"source":dicts[source],"destination":dicts[destination]}
-            print(data)
+            #print(data)
             req = requests.post("http://54.209.210.47/api/v1/db/write",json=data)
             return Response(status=req.status_code)
 
@@ -336,6 +334,14 @@ def list_details(rideId):
     req_ride=requests.post("http://54.209.210.47/api/v1/db/read",json=check_ride)
     response_from_api=req_ride.json()["string"]
     resp1=response_from_api.split("\n")
+    dicts={}
+
+    csvfile=open("AreaNameEnum.csv",'r')
+    c = csv.reader(csvfile)
+   
+    ##print(fields)
+    for row in c:
+        dicts[row[0]]=row[1]
     if(len(resp1)>1):
 
         data={"table":"rides","insert":["rideId","created_by","ride_users","time_stamp","source","destination"],"where":"rideId="+rideId,"where_flag":1}
@@ -346,11 +352,21 @@ def list_details(rideId):
         #print(resp1)
         for resp in resp1:
             resp2=resp[1:-1].split(",")
-            #print(resp2)
             users=",".join(resp2[2:len(resp2)-3])
             pt=len(resp2)-4
+            src=list(dicts.keys())[list(dicts.values()).index(resp2[pt+2][1:].replace("'",""))]
+            dst=list(dicts.keys())[list(dicts.values()).index(resp2[pt+3][1:].replace("'",""))]
+            
             if(len(resp2)>1):
-                return "{\n rideId : "+resp2[0]+"\n created_by : "+resp2[1]+"\n ride_users : "+users+"\n time_stamp : "+resp2[pt+1]+"\n source : "+resp2[pt+2]+"\n destination : "+resp2[pt+3]+"\n }"
+                return jsonify(
+                    rideId=int(resp2[0].replace("'","").replace(" ","")),
+                    created_by=resp2[1].replace("'","").replace(" ",""),
+                    ride_users=users.replace("'","").replace(" ","").split(","),
+                    time_stamp=resp2[pt+1].replace("'","").replace(" ",""),
+                    source=int(src),
+                    destination=int(dst)
+                    )
+                
             else:
                 return Response(status=204)
     else:
@@ -362,7 +378,7 @@ def list_details(rideId):
 def list_source_to_destination():
     source=request.args.get('source',None)
     destination=request.args.get('destination',None)
-    print("FINALLY INSIDE!")
+    #print("FINALLY INSIDE!")
     fields=[]
     rows=[]
     dicts={}
@@ -371,13 +387,13 @@ def list_source_to_destination():
         with open("AreaNameEnum.csv",'r') as csvfile:
             c = csv.reader(csvfile)
    
-    #print(fields)
+    ##print(fields)
             for row in c:
                 dicts[row[0]]=row[1]
             source_place=dicts[source]
             destination_place=dicts[destination]
     except KeyError:
-        print("source or destination doesnt exist")
+        #print("source or destination doesnt exist")
         return Response(status=400)
    
     data={"table":"rides","insert":["rideId","created_by","ride_users","time_stamp","source","destination"],"where":"source='"+source_place+"' AND destination='"+destination_place+"'","where_flag":1}
@@ -385,26 +401,50 @@ def list_source_to_destination():
    
     response_from_api=req.json()["string"]
     resp1=response_from_api.split("\n")
-    #print(resp1)
+    ##print(resp1)
     
     if(len(resp1)==1):
         return Response(status=204)
-    s="[\n"
+    #s="[\n"
+    fin_list=[]
     for resp in resp1:
         resp2=resp[1:-1].split(",")
         
         
-        if(len(resp2)>1 and check_date(resp2[len(resp2)-3])):
-            #print("content present")
+        #if(len(resp2)>1 and check_date(resp2[len(resp2)-3])):
+        if(len(resp2)>1):
+            ##print("content present")
             users=",".join(resp2[2:len(resp2)-3])
+            print(users)
             pt=len(resp2)-4
-            #print(users)
-            s=s+"{\n rideId : "+resp2[0]+"\n created_by : "+resp2[1]+"\n ride_users : "+users+"\n time_stamp : "+resp2[pt+1]+"\n source : "+resp2[pt+2]+"\n destination : "+resp2[pt+3]+"\n }"+",\n"
+            src=list(dicts.keys())[list(dicts.values()).index(resp2[pt+2][1:].replace("'",""))]
+            dst=list(dicts.keys())[list(dicts.values()).index(resp2[pt+3][1:].replace("'",""))]
+            #s=s+"{\n rideId : "+resp2[0]+"\n created_by : "+resp2[1]+"\n ride_users : "+users+"\n time_stamp : "+resp2[pt+1]+"\n source : "+src+"\n destination : "+dst+"\n }"+",\n"
             #fin_list.append("{\n rideId : "+resp2[0]+"\n created_by : "+resp2[1]+"\n ride_users : "+users+"\n time_stamp : "+resp2[pt+1]+"\n source : "+resp2[pt+2]+"\n destination : "+resp2[pt+3]+"\n }")
-    if(s=="[\n"):
+            if len(users.replace("'","").replace(" ","").split(","))!=0:
+               fin_list.append({
+                "rideId":int(resp2[0].replace("'","").replace(" ","")),
+                "created_by":resp2[1].replace("'","").replace(" ",""),
+                "users":users.replace("'","").replace(" ","").split(","),
+                "timestamp":resp2[pt+1].replace("'","").replace(" ",""),
+                "source":str(src),
+                "destination":str(dst)
+                })
+            else:
+               fin_list.append({
+			"rideId":int(resp2[0].replace("'","").replace(" ","")),
+			"created_by" :resp2[1].replace("'","").replace(" ",""),
+			"users":[],
+			"timestamp":resp2[pt+1].replace("'","").replace(" ",""),
+			"source":str(src),
+			"destination":str(dst)
+		})
+    if(len(fin_list)==0):
         return Response(status=400)
     else:    
-        return s[:-2]+"\n]"    
+        #return s[:-2]+"\n]"
+        #print(fin_list)
+        return jsonify(fin_list)    
 
 
 @app.route("/api/v1/rides/<rideId>",methods=["DELETE"])
@@ -415,11 +455,11 @@ def del_ride(rideId):
 
 @app.route("/api/v1/users/<username>",methods=["DELETE"])
 def del_users(username):
-    print("entering here")
+    #print("entering here")
     data={"username":username,"join":3}
     req = requests.post("http://54.209.210.47/api/v1/db/write",json=data)
     return Response(status=req.status_code)
 
 
 if __name__=="__main__":
-    app.run(host='0.0.0.0',debug=True)
+    app.run(host="0.0.0.0",debug=True)

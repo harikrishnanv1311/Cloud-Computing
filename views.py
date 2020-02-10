@@ -5,8 +5,8 @@ import requests
 import re
 import csv
 import datetime
-
-con = sqlite3.connect("app.db")
+import os
+con = sqlite3.connect("/home/ubuntu/myproject/Cloud-Computing/app.db")
 
 
 cur=con.cursor()
@@ -34,7 +34,7 @@ app = Flask(__name__)
 #     source = db.Column(db.String(80), nullable = False)
 #     destination = db.Column(db.String(80), nullable = False)
 #     timestamp = db.Column(db.String(20), nullable = False)
-
+f =  open("testing.txt","a")
 
 def check_date(date):
     #29-01-2020:30-20-18
@@ -60,16 +60,19 @@ def write_db():
         if(table=="users"):
         ##print(type(p))
             try:
-                with sqlite3.connect("app.db") as con:
+                print("enteruing")
+                with sqlite3.connect("/home/ubuntu/myproject/Cloud-Computing/app.db") as con:
                     username=request.get_json()["username"]
                     password=request.get_json()["password"]
-                    #return "table is %s, username is %s, password is %s"%(table,u,p)
+                    print(username,passwowrd)
+		    #return "table is %s, username is %s, password is %s"%(table,u,p)
                     cur = con.cursor()
                     cur.execute("INSERT into users values (?,?)",(username,password))
                     con.commit()
                     return Response(status=201)
             except Exception as e:
-                    #print(e)
+                    f.write("something")
+                    return "hello"
                     return Response(status=400)
 
                    
@@ -263,9 +266,12 @@ def read_db():
 
 @app.route("/api/v1/users",methods=["PUT"])
 def add_user():
+    f.write("check 3")
+    return "hello 3"
     if(request.method=="PUT"):
         try:
-            ##print("LOL")
+            print("LOL")
+            f.write("check 1")
             username=request.get_json(force=True)["username"]
             ##print("yo")
             password=request.get_json()["password"]
@@ -278,15 +284,16 @@ def add_user():
             ##print("HERE",flag,len(password))
             # #print(flag)
             if(flag==0 and len(password)==40 and username!=""):
+                f.write("chck 2")
                 #print("In")
                 data={"table":"users","username":username,"password":password,"join":0}
                 req=requests.post("http://54.209.210.47/api/v1/db/write",json=data)
                 return Response(status=req.status_code)
             else:
-                return Response(status=400)
+                return Response(status=207)
 
         except Exception as e:
-            return Response(status=400)
+            return Response(status=209)
 
     else:
         return Response(status=405)
