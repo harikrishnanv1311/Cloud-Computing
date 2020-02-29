@@ -8,7 +8,7 @@ import datetime
 
 con = sqlite3.connect("app.db")
 
-
+write_url="http://0.0.0.0/api/v1/db/write"
 cur=con.cursor()
 con.execute("PRAGMA foreign_keys = ON")
 cur.execute("CREATE TABLE IF NOT EXISTS users(username TEXT primary key NOT NULL, password TEXT NOT NULL)")
@@ -275,12 +275,12 @@ def add_user():
             x=re.findall("[g-z]",string)
             # #print(x)
             flag=len(x)
-            ##print("HERE",flag,len(password))
+            print("HERE",flag,len(password))
             # #print(flag)
             if(flag==0 and len(password)==40 and username!=""):
                 #print("In")
                 data={"table":"users","username":username,"password":password,"join":0}
-                req=requests.post("http://54.209.210.47/api/v1/db/write",json=data)
+                req=requests.post(write_url,json=data)
                 if(req.status_code==200):
                       return Response(status=201)
                 else:
@@ -460,6 +460,10 @@ def del_users(username):
     req = requests.post("http://54.209.210.47/api/v1/db/write",json=data)
     return Response(status=req.status_code)
 
+@app.route("/")
+def greet():
+    return "CODE RUNNING FINE"
+
 
 if __name__=="__main__":
-    app.run(host="0.0.0.0",debug=True)
+    app.run(host="0.0.0.0",port="5000",debug=True)

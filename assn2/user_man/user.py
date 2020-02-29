@@ -40,6 +40,7 @@ app = Flask(__name__)
 
 @app.route("/api/v1/db/write",methods=["POST"])
 def write_db():
+    print("entering write")
     #access book name sent as JSON object
     #in POST request body
     join = request.get_json()["join"]
@@ -51,7 +52,7 @@ def write_db():
                 with sqlite3.connect("app.db") as con:
                     username=request.get_json()["username"]
                     password=request.get_json()["password"]
-                    #return "table is %s, username is %s, password is %s"%(table,u,p)
+                    print( "table is %s, username is %s, password is %s"%(table,username,password))
                     cur = con.cursor()
                     cur.execute("INSERT into users values (?,?)",(username,password))
                     con.commit()
@@ -189,19 +190,28 @@ def clear_db():
             cur.execute("DELETE FROM users")
             #cur.execute("DELETE FROM rides")
             con.commit()
+            return Response(status=200)
 
     except:
         return Response(status=405)
                
 @app.route("/api/v1/users",methods=["GET"])
 def list_users():
+    s=""
+    print("check")
     try:
         with sqlite3.connect("app.db") as con:
             cur=con.cursor()
             cur.execute("SELECT username FROM users")
+            # print(cur)
             con.commit()
             status=200
-            return Response(status=200)
+            for i in cur:
+                print(i)
+                s = s + str(i) + "\n"
+                print(type(i))
+            return s
+            # return Response(status=200)
     except:
         return Response(status=405)
 
@@ -221,12 +231,12 @@ def add_user():
             x=re.findall("[g-z]",string)
             # #print(x)
             flag=len(x)
-            ##print("HERE",flag,len(password))
-            # #print(flag)
+            print("HERE",flag,len(password))
+            # print(flag)
             if(flag==0 and len(password)==40 and username!=""):
-                #print("In")
+                print("In")
                 data={"table":"users","username":username,"password":password,"join":0}
-                req=requests.post("http://54.209.210.47/api/v1/db/write",json=data)
+                req=requests.post("http://127.0.0.1:5000/api/v1/db/write",json=data)
                 if(req.status_code==200):
                       return Response(status=201)
                 else:
@@ -243,7 +253,7 @@ def add_user():
 
 @app.route("/")
 def greet():
-    return "HERE AT LAST!"
+    return "HERE IN THE USER PAGE!"
 
 
 @app.route("/api/v1/users/<username>",methods=["DELETE"])
