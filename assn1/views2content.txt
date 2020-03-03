@@ -5,10 +5,10 @@ import requests
 import re
 import csv
 import datetime
+import os
+con = sqlite3.connect("/home/ubuntu/myproject/Cloud-Computing/app.db")
 
-con = sqlite3.connect("app.db")
 
-write_url="http://0.0.0.0/api/v1/db/write"
 cur=con.cursor()
 con.execute("PRAGMA foreign_keys = ON")
 cur.execute("CREATE TABLE IF NOT EXISTS users(username TEXT primary key NOT NULL, password TEXT NOT NULL)")
@@ -34,7 +34,7 @@ app = Flask(__name__)
 #     source = db.Column(db.String(80), nullable = False)
 #     destination = db.Column(db.String(80), nullable = False)
 #     timestamp = db.Column(db.String(20), nullable = False)
-
+f =  open("testing.txt","a")
 
 def check_date(date):
     #29-01-2020:30-20-18
@@ -60,16 +60,19 @@ def write_db():
         if(table=="users"):
         ##print(type(p))
             try:
-                with sqlite3.connect("app.db") as con:
+                print("enteruing")
+                with sqlite3.connect("/home/ubuntu/myproject/Cloud-Computing/app.db") as con:
                     username=request.get_json()["username"]
                     password=request.get_json()["password"]
-                    #return "table is %s, username is %s, password is %s"%(table,u,p)
+                    print(username,passwowrd)
+		    #return "table is %s, username is %s, password is %s"%(table,u,p)
                     cur = con.cursor()
                     cur.execute("INSERT into users values (?,?)",(username,password))
                     con.commit()
                     return Response(status=201)
             except Exception as e:
-                    #print(e)
+                    f.write("something")
+                    return "hello"
                     return Response(status=400)
 
                    
@@ -101,13 +104,13 @@ def write_db():
                     #m=cur.fetchone()[0]
                     #print(m)
                     cur.execute("INSERT into rides (rideId,created_by,ride_users,time_stamp,source,destination) values (?,?,?,?,?,?)",(m+1,created_by,ride_users,time_stamp,source,destination))
-                    print("Surya")
+                    #print("Surya")
                     con.commit()
                     status=201
                     return Response(status=201)
             except Exception as e:
-                print(e)
-                return Response(status=400)
+                #print(e)
+                return Response(status=405)
 
     if(join==1):
         try:
@@ -235,7 +238,7 @@ def read_db():
                 return jsonify({"string":s})
         except:
        
-               return Response(status=400)
+                status=400
     else:   #rides
         try:
             with sqlite3.connect("app.db") as con:
@@ -257,15 +260,18 @@ def read_db():
                     s = s + str(i) + "\n"
                 return jsonify({"string":s})
         except:
-                return Response(status=400)
+                status=400
     return s
 
 
 @app.route("/api/v1/users",methods=["PUT"])
 def add_user():
+    f.write("check 3")
+    return "hello 3"
     if(request.method=="PUT"):
         try:
-            ##print("LOL")
+            print("LOL")
+            f.write("check 1")
             username=request.get_json(force=True)["username"]
             ##print("yo")
             password=request.get_json()["password"]
@@ -275,21 +281,19 @@ def add_user():
             x=re.findall("[g-z]",string)
             # #print(x)
             flag=len(x)
-            print("HERE",flag,len(password))
+            ##print("HERE",flag,len(password))
             # #print(flag)
             if(flag==0 and len(password)==40 and username!=""):
+                f.write("chck 2")
                 #print("In")
                 data={"table":"users","username":username,"password":password,"join":0}
-                req=requests.post("http://0.0.0.0/api/v1/db/write",json=data)
-                if(req.status_code==200):
-                      return Response(status=201)
-                else:
-                      return Response(status=req.status_code)
+                req=requests.post("http://54.209.210.47/api/v1/db/write",json=data)
+                return Response(status=req.status_code)
             else:
-                return Response(status=400)
+                return Response(status=207)
 
         except Exception as e:
-            return Response(status=400)
+            return Response(status=209)
 
     else:
         return Response(status=405)
@@ -315,7 +319,7 @@ def create_ride():
         ##print(dicts)
         ##print(type(request.get_json()))
         created_by=request.get_json()["created_by"]
-        time_stamp=request.get_json()["timestamp"]
+        time_stamp=request.get_json()["time_stamp"]
         source=request.get_json()["source"]
         destination=request.get_json()["destination"]
         if(time.strptime(time_stamp, '%d-%m-%Y:%S-%M-%H')):
@@ -415,30 +419,19 @@ def list_source_to_destination():
         if(len(resp2)>1):
             ##print("content present")
             users=",".join(resp2[2:len(resp2)-3])
-            print(users)
             pt=len(resp2)-4
             src=list(dicts.keys())[list(dicts.values()).index(resp2[pt+2][1:].replace("'",""))]
             dst=list(dicts.keys())[list(dicts.values()).index(resp2[pt+3][1:].replace("'",""))]
             #s=s+"{\n rideId : "+resp2[0]+"\n created_by : "+resp2[1]+"\n ride_users : "+users+"\n time_stamp : "+resp2[pt+1]+"\n source : "+src+"\n destination : "+dst+"\n }"+",\n"
             #fin_list.append("{\n rideId : "+resp2[0]+"\n created_by : "+resp2[1]+"\n ride_users : "+users+"\n time_stamp : "+resp2[pt+1]+"\n source : "+resp2[pt+2]+"\n destination : "+resp2[pt+3]+"\n }")
-            if len(users.replace("'","").replace(" ","").split(","))!=0:
-               fin_list.append({
+            fin_list.append({
                 "rideId":int(resp2[0].replace("'","").replace(" ","")),
                 "created_by":resp2[1].replace("'","").replace(" ",""),
-                "users":users.replace("'","").replace(" ","").split(","),
-                "timestamp":resp2[pt+1].replace("'","").replace(" ",""),
-                "source":str(src),
-                "destination":str(dst)
+                "ride_users":users.replace("'","").replace(" ","").split(","),
+                "time_stamp":resp2[pt+1].replace("'","").replace(" ",""),
+                "source":int(src),
+                "destination":int(dst)
                 })
-            else:
-               fin_list.append({
-			"rideId":int(resp2[0].replace("'","").replace(" ","")),
-			"created_by" :resp2[1].replace("'","").replace(" ",""),
-			"users":[],
-			"timestamp":resp2[pt+1].replace("'","").replace(" ",""),
-			"source":str(src),
-			"destination":str(dst)
-		})
     if(len(fin_list)==0):
         return Response(status=400)
     else:    
@@ -460,10 +453,6 @@ def del_users(username):
     req = requests.post("http://54.209.210.47/api/v1/db/write",json=data)
     return Response(status=req.status_code)
 
-@app.route("/")
-def greet():
-    return "CODE RUNNING FINE"
-
 
 if __name__=="__main__":
-    app.run(host="0.0.0.0",port="5000",debug=True)
+    app.run(host="0.0.0.0",debug=True)

@@ -6,7 +6,7 @@ import re
 import csv
 import datetime
 import os
-con = sqlite3.connect("/home/ubuntu/myproject/Cloud-Computing/app.db")
+con = sqlite3.connect("C:/Users/Shubha/Documents/GitHub/Cloud-Computing/assn1/app.db")
 
 
 cur=con.cursor()
