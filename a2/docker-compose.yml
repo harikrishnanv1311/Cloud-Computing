@@ -1,0 +1,15 @@
+version: "3"
+services: 
+    user_man:
+        build: ./user_man
+        image: "users:latest"
+        ports:
+            - "8080:80"
+        container_name : "users"
+
+    ride_man:
+        build: ./ride_man
+        image: "rides:latest"
+        ports:
+            - "8000:80"
+        container_name : "rides"

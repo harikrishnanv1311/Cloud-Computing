@@ -5,12 +5,13 @@ import requests
 import re
 import csv
 import datetime
+import json
 
-path = "C:/Users/Shubha/Documents/GitHub/Cloud-Computing/assn2/user_man/app.db"
-areapath = "C:/Users/Shubha/Documents/GitHub/Cloud-Computing/assn2/ride_man/app/AreaNameEnum.csv"
-ipaddr = "http://127.0.0.1:8080"
+path = "app.db"
+areapath = "AreaNameEnum.csv"
+ipaddr = "http://18.233.235.204:8000"
 
-con = sqlite3.connect(path)
+con = sqlite3.connect("app.db")
 
 cur=con.cursor()
 con.execute("PRAGMA foreign_keys = ON")
@@ -112,7 +113,7 @@ def write_db():
                     #m=cur.fetchone()[0]
                     print(m)
                     cur.execute("INSERT into rides (rideId,created_by,ride_users,timestamp,source,destination) values (?,?,?,?,?,?)",(m+1,created_by,ride_users,timestamp,source,destination))
-                    print("Surya")
+                    # print("Surya")
                     con.commit()
                     status=201
                     return Response(status=201)
@@ -126,7 +127,7 @@ def write_db():
                 rideId = request.get_json()["rideId"]
                 username = request.get_json()["username"]
                 
-                ##print(username)
+                print(username)
                 u=""
                 #check_rides_q = "SELECT COUNT(*) FROM rides WHERE rideId"+str(rideId)
                
@@ -138,20 +139,22 @@ def write_db():
                 '''
                 cur.execute("SELECT count(*) FROM rides WHERE rideId="+str(rideId))
                 ride_flag=cur.fetchone()[0]
-                cur.execute("SELECT count(*) FROM users WHERE username="+"'"+str(username)+"'")
-                user_flag=cur.fetchone()[0]
+                #cur.execute("SELECT count(*) FROM users WHERE username="+"'"+str(username)+"'")
+                user_flag=1
                 con.commit()
 
-            
+                print(ride_flag,user_flag)
                 if(ride_flag and user_flag):
                     cur.execute("SELECT ride_users FROM rides WHERE rideId="+str(rideId))
                     con.commit()
                     r_u=cur.fetchone()[0].split(",")
+                    print(r_u,username)
                     if username not in r_u:
                         for i in r_u:
                             if(i!=""):
                                 u = u + i + ","
                         u += username
+                        print("total users", u)
                         query="UPDATE rides SET ride_users="+"'"+str(u)+"'"+" WHERE rideId="+str(rideId)
                         cur.execute(query)
                         con.commit()
@@ -318,18 +321,21 @@ def add_user():
 @app.route("/api/v1/rides/<rideId>",methods=["POST"])
 def join_ride(rideId):
     username=request.get_json()["username"]
-    x=requests.get("http://127.0.0.1:8080/api/v1/users")
+    x=requests.get("http://18.233.235.204:8080/api/v1/users")
     if x.status_code==204:return Response(status=400)
-    print(x)
-    if(username not in x):
+    l1 = json.loads(x.text)
+    print(l1)
+    if(username not in l1):
+        print("")
         return Response(status=400)
     data = {"rideId":rideId,"username":username,"join":1}
     req = requests.post(ipaddr+"/api/v1/db/write",json=data)
+    print("user joined ")
     return Response(status=200)
 
 @app.route("/")
 def greet():
-    return "HERE AT LAST!"
+    return "HERE AT RIDE PAGE!"
 
 
 @app.route("/api/v1/rides",methods=["POST"])
@@ -338,7 +344,7 @@ def create_ride():
         dicts={}
         try:
             with open(areapath,'r') as csvfile:
-                print("Got Data")
+                # print("Got Data")
                 c = csv.reader(csvfile)
                 for row in c:
                     dicts[row[0]]=row[1]
@@ -346,12 +352,17 @@ def create_ride():
             #print(dicts)
             #print(type(request.get_json()))
             created_by=request.get_json()["created_by"]
-            x=requests.get("http://127.0.0.1:8080/api/v1/users")
+            x=requests.get("http://18.233.235.204:8080/api/v1/users")
+            print("yolo")
             if x.status_code==204:return Response(status=400)
-            print(x)
-            if(created_by not in x):
+            print("yolo2")
+            l1= json.loads(x.text)
+            # l1 = s.split("\n")
+            # print("#########")
+            print(l1)
+            # print("#########")
+            if(created_by not in l1):
                 return Response(status=400)
-            #print(created_by)
             timestamp=request.get_json()["timestamp"]
             #print("2")
             source=request.get_json()["source"]
@@ -516,28 +527,6 @@ def del_users(username):
     else:
         return Response(status=405)
 #######################################################################################
-@app.route("/api/v1/users",methods=["GET"])
-def list_users():
-    if(request.method=="GET"):
-        s=[]
-        print("check")
-        try:
-            with sqlite3.connect(path) as con:
-                cur=con.cursor()
-                cur.execute("SELECT username FROM users")
-                # print(cur)
-                con.commit()
-                status=200
-                for i in cur:
-                    print(i)
-                    # s = s + str(i[0])
-                    s.append(str(i[0]))
-                    print(type(i))
-                return jsonify(s)
-                # return Response(status=200)
-        except:
-            return Response(status=400)
-    else:
-        return Response(status=405)
+
 if __name__=="__main__":
-    app.run(host="127.0.0.1",port=8080,debug=True)
+    app.run(host="127.0.0.1",port=8000,debug=True)
