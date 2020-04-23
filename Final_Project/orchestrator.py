@@ -67,7 +67,7 @@ class ResponseObject(object):
 
     def on_response(self, ch, method, props, body):
         if self.corr_id == props.correlation_id:
-            self.response = json.loads(body)
+            self.response = body
 
     def call(self, n):
         self.response = None
@@ -124,9 +124,8 @@ def read_db():
 	message = request.get_json()
 	respObj = ResponseObject()
 
-	print(" [x] Requesting fib(30)")
-	response = respObj.call(message)
-	print(" [.] Got %r" % response)
+	response = respObj.call(message).decode()
+	print(" [.] Got Response for READ:%r" % response)
 	#rabbitMQreadcall(message)
 	return response
 	

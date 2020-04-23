@@ -9,13 +9,41 @@ import json
 import sys
 import os
 
-path = "app.db"
 
+# cont_id = os.popen("hostname").read().strip()
+# print(cont_id)
+
+# path = "app"+str(cont_id)+".db"
+
+# con = sqlite3.connect(path)
+
+# cur=con.cursor()
+# con.execute("PRAGMA foreign_keys = ON")
+# cur.execute("CREATE TABLE IF NOT EXISTS users(username TEXT primary key NOT NULL, password TEXT NOT NULL)")
+# cur.execute("CREATE TABLE IF NOT EXISTS rides(rideId INTEGER PRIMARY KEY, created_by TEXT,ride_users TEXT, timestamp TEXT, source TEXT, destination TEXT,FOREIGN KEY (created_by) REFERENCES users (username) ON DELETE CASCADE)")
+# con.commit()
+
+path=""
+if(sys.argv[1]=="0"):
+    #print("Sys.arg val for Slave is:",sys.argv[1])
+    # cont_id = os.popen("hostname").read().strip()
+    # print(cont_id)
+
+    path = "appff83d85e04db.db"
+
+
+if(sys.argv[1]=="1"):
+    #print("Sys.arg val for Master is:",sys.argv[1])
+    # cont_id = os.popen("hostname").read().strip()
+    # print(cont_id)
+
+    path = "appde4c33ae6ecb.db"
 
 def syncQueryExecute(ch, method, props, body):
     with sqlite3.connect(path) as con:
         cur = con.cursor()
-        q = body
+        q = body.decode()
+        print("q is:",q," and it's type is:",type(q))
         cur.execute(q)
         print("Query '"+q+"' Successfully executed")
 
@@ -41,24 +69,38 @@ def callbackread(ch, method, props, body):
     if(table=="users"):
         ##print(type(p))
         try:
+
+            '''    
+            Use this as the json data to send from the user's container
+            {
+                "table":"users",
+                "insert":["username"],
+                "where_flag":0
+            }
+            '''
+            
             with sqlite3.connect(path) as con:
                 #return "table is %s, username is %s, password is %s"%(table,u,p)
                 cur = con.cursor()
                 #print("hi")
-                if(where_flag):
-                    where=request["where"]
-                    query="SELECT "+cols+" from users WHERE "+where
-                else:
-                    query="SELECT "+cols+" from users"
+                query="SELECT username from users"
+        
                 #print(query)
                 cur.execute(query)
                 #print("hello")
                 con.commit()
                 status=201
                 for i in cur:
-                    s = s + str(i) + "\n"
+                    s = s + str(i[0]) + ","
                     # #print(type(i))
                 #return jsonify({"string":s})
+                s=s[:-1]
+                '''
+                BROOOO SURYAAAAA, it returns it this way:
+
+                'Hari','Surya','JT','Rahul'
+                '''
+
                 print("Users List:",s)
         except:
                 print(e)
@@ -279,6 +321,20 @@ def callbackwrite(ch, method, properties, body):
 
 if(sys.argv[1]=="1"):
     print("Sys.arg val for Master is:",sys.argv[1])
+
+    # cont_id = os.popen("hostname").read().strip()
+    # print(cont_id)
+
+    #path = "appde4c33ae6ecb.db"
+
+    con = sqlite3.connect(path)
+
+    cur=con.cursor()
+    con.execute("PRAGMA foreign_keys = ON")
+    cur.execute("CREATE TABLE IF NOT EXISTS users(username TEXT primary key NOT NULL, password TEXT NOT NULL)")
+    cur.execute("CREATE TABLE IF NOT EXISTS rides(rideId INTEGER PRIMARY KEY, created_by TEXT,ride_users TEXT, timestamp TEXT, source TEXT, destination TEXT,FOREIGN KEY (created_by) REFERENCES users (username) ON DELETE CASCADE)")
+    con.commit()
+
     connection = pika.BlockingConnection(
     pika.ConnectionParameters(host='rmq'))
     channel = connection.channel()
@@ -296,8 +352,12 @@ if(sys.argv[1]=="1"):
 if(sys.argv[1]=="0"):
     print("Sys.arg val for Slave is:",sys.argv[1])
     
+    # cont_id = os.popen("hostname").read().strip()
+    # print(cont_id)
 
-    con = sqlite3.connect("app.db")
+    #path = "appff83d85e04db.db"
+
+    con = sqlite3.connect(path)
 
     cur=con.cursor()
     con.execute("PRAGMA foreign_keys = ON")
@@ -305,11 +365,6 @@ if(sys.argv[1]=="0"):
     cur.execute("CREATE TABLE IF NOT EXISTS rides(rideId INTEGER PRIMARY KEY, created_by TEXT,ride_users TEXT, timestamp TEXT, source TEXT, destination TEXT,FOREIGN KEY (created_by) REFERENCES users (username) ON DELETE CASCADE)")
     con.commit()
 
-
-
-
-    cont_id = os.popen("hostname").read()
-    print(cont_id)
 
 
     connection = pika.BlockingConnection(
