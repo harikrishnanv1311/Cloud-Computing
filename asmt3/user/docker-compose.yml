@@ -1,0 +1,8 @@
+version: "3"
+services: 
+    user_man:
+        build: ./user_man
+        image: "users:latest"
+        ports:
+            - "80:80"
+        container_name : "users"

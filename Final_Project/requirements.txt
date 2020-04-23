@@ -1,0 +1,6 @@
+ipython
+pika
+kazoo
+flask
+requests
+uuid
