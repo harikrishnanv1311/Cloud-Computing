@@ -29,7 +29,7 @@ def demo_func(event):
     zk.create("/producer/node_2", b"new demo producer node") 
     print(event)
     children = zk.get_children("/producer")
-    print("There are %s children with names %s" % (len(children), children))
+    print("There are %s children after Delete is called with names %s" % (len(children), children))
 
 zk = KazooClient(hosts='zoo:2181')
 zk.start()
@@ -51,7 +51,7 @@ print("Version: %s, data: %s" % (stat.version, data.decode("utf-8")))
 
 # List the children
 children = zk.get_children("/producer", watch=demo_func)
-print("There are %s children with names %s" % (len(children), children))
+print("Intially Before Deletion there are: %s children and they are: %s" % (len(children), children))
 
 zk.delete("/producer/node_1")
 print("Deleted /producer/node_1")

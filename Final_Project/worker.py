@@ -136,7 +136,7 @@ def callbackread(ch, method, props, body):
             routing_key=props.reply_to,
             properties=pika.BasicProperties(correlation_id =props.correlation_id),
             body=s)
-
+    ch.basic_ack(delivery_tag = method.delivery_tag)
     print("[*] Sent Message from Slave: ",s)
     
 
@@ -165,9 +165,22 @@ def callbackwrite(ch, method, properties, body):
                     print("enter 3")
                     con.commit()
                     ch.basic_publish(exchange='fan', routing_key='', body=q)
+
+                    s = {"status":201}
+
+                    ch.basic_publish(exchange='',
+                        routing_key=properties.reply_to,
+                        properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                        body=json.dumps(s))
                     #return Response(status=201)
             except Exception as e:
+                s = {"status":400}
                 print(e)
+                ch.basic_publish(exchange='',
+                        routing_key=properties.reply_to,
+                        properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                        body=json.dumps(s))
+                
                 #return Response(status=400)
 
 
@@ -206,10 +219,23 @@ def callbackwrite(ch, method, properties, body):
                     
                     ch.basic_publish(exchange='fan', routing_key='', body=q)
                     
+                    s = {"status":201}
+
+                    ch.basic_publish(exchange='',
+                        routing_key=properties.reply_to,
+                        properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                        body=json.dumps(s))
+
                     con.commit()
                     status=201
                     #return Response(status=201)
             except Exception as e:
+                s = {"status":400}
+
+                ch.basic_publish(exchange='',
+                        routing_key=properties.reply_to,
+                        properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                        body=json.dumps(s))
                 print(e)
                 #return Response(status=400)
 
@@ -252,16 +278,40 @@ def callbackwrite(ch, method, properties, body):
                         con.commit()
 
                         ch.basic_publish(exchange='fan', routing_key='', body=query)
+                        s = {"status":200}
+
+                        ch.basic_publish(exchange='',
+                            routing_key=properties.reply_to,
+                            properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                            body=json.dumps(s))
                         #return Response(status=200)
                         print("Joined Ride!")
 
                     else:
+                        s = {"status":400}
+
+                        ch.basic_publish(exchange='',
+                            routing_key=properties.reply_to,
+                            properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                            body=json.dumps(s))
                         #return Response(status=400)
                         print("Duplicate User!")
                 else:
+                    s = {"status":400}
+
+                    ch.basic_publish(exchange='',
+                        routing_key=properties.reply_to,
+                        properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                        body=json.dumps(s))
                     print("Ride doesn't exist!")
                     #return Response(status=400)
         except Exception as e:
+            s = {"status":405}
+
+            ch.basic_publish(exchange='',
+                    routing_key=properties.reply_to,
+                    properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                    body=json.dumps(s))
             print(e)
             #return Response(status=405)
         
@@ -281,12 +331,31 @@ def callbackwrite(ch, method, properties, body):
                         cur.execute(q)
                         con.commit()
                         ch.basic_publish(exchange='fan', routing_key='', body=q)
+                        s = {"status":200}
+
+                        ch.basic_publish(exchange='',
+                            routing_key=properties.reply_to,
+                            properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                            body=json.dumps(s))
+
                         print("Ride Deleted Successfully")
                         #return Response(status=200)
                     else:
+                        s = {"status":400}
+
+                        ch.basic_publish(exchange='',
+                            routing_key=properties.reply_to,
+                            properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                            body=json.dumps(s))
                         print("Ride doesn't exist!")
                         #return Response(status=400)
         except Exception as e:
+            s = {"status":500}
+
+            ch.basic_publish(exchange='',
+                    routing_key=properties.reply_to,
+                    properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                    body=json.dumps(s))
             print(e)
             #return Response(status=405)
 
@@ -307,13 +376,30 @@ def callbackwrite(ch, method, properties, body):
                         con.commit()
 
                         ch.basic_publish(exchange='fan', routing_key='', body=q)
+                        s = {"status":200}
 
+                        ch.basic_publish(exchange='',
+                            routing_key=properties.reply_to,
+                            properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                            body=json.dumps(s))
                         print("User Deleted Successfully!")
                         #return Response(status=200)
                     else:
+                        s = {"status":400}
+
+                        ch.basic_publish(exchange='',
+                            routing_key=properties.reply_to,
+                            properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                            body=json.dumps(s))
                         print("User doesn't exist!")
                         #return Response(status=400)
         except Exception as e:
+            s = {"status":400}
+
+            ch.basic_publish(exchange='',
+                    routing_key=properties.reply_to,
+                    properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                    body=json.dumps(s))
             print(e)
             #eturn Response(status=400)
     ch.basic_ack(delivery_tag = method.delivery_tag)
@@ -340,7 +426,7 @@ if(sys.argv[1]=="1"):
     channel = connection.channel()
 
     channel.queue_declare(queue='writeQ', durable=True)
-    
+    channel.queue_declare(queue='writeResponseQ', durable=True)
     channel.exchange_declare(exchange='fan',exchange_type='fanout')
     
     # channel.queue_declare(queue='syncQ', durable=True)

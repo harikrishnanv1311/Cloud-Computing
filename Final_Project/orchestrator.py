@@ -46,6 +46,49 @@ app = Flask(__name__)
 # 		)
 # 	print(" After consuming!")
 
+class writeResponseObject(object):
+
+    def __init__(self):
+        self.connection = pika.BlockingConnection(
+            pika.ConnectionParameters(host='rmq'))
+
+        self.channel = self.connection.channel()
+
+        req = self.channel.queue_declare(queue='writeQ',durable = True)
+        self.request_queue = req.method.queue
+
+        result = self.channel.queue_declare(queue='writeResponseQ', durable = True)
+        self.callback_queue = result.method.queue
+
+        
+        self.channel.basic_consume(
+            queue=self.callback_queue,
+            on_message_callback=self.on_response,
+            auto_ack=True)
+        
+
+    def on_response(self, ch, method, props, body):
+        if self.corr_id == props.correlation_id:
+            self.response = body
+
+    def call(self, n):
+        self.response = None
+        self.corr_id = str(uuid.uuid4())
+        self.channel.basic_publish(
+            exchange='',
+            routing_key=self.request_queue,
+            properties=pika.BasicProperties(
+                reply_to=self.callback_queue,
+                correlation_id=self.corr_id,
+            ),
+            body=json.dumps(n))
+        while self.response is None:
+            self.connection.process_data_events()
+
+        self.connection.close()
+        print(self.response)
+        return self.response
+
 
 
 
@@ -57,6 +100,9 @@ class ResponseObject(object):
 
         self.channel = self.connection.channel()
 
+        req = self.channel.queue_declare(queue='readQ',durable = True)
+        self.read_queue = req.method.queue
+
         result = self.channel.queue_declare(queue='responseQ', durable = True)
         self.callback_queue = result.method.queue
 
@@ -64,6 +110,7 @@ class ResponseObject(object):
             queue=self.callback_queue,
             on_message_callback=self.on_response,
             auto_ack=True)
+        
 
     def on_response(self, ch, method, props, body):
         if self.corr_id == props.correlation_id:
@@ -74,7 +121,7 @@ class ResponseObject(object):
         self.corr_id = str(uuid.uuid4())
         self.channel.basic_publish(
             exchange='',
-            routing_key='readQ',
+            routing_key=self.read_queue,
             properties=pika.BasicProperties(
                 reply_to=self.callback_queue,
                 correlation_id=self.corr_id,
@@ -82,6 +129,8 @@ class ResponseObject(object):
             body=json.dumps(n))
         while self.response is None:
             self.connection.process_data_events()
+
+        self.connection.close()
         print(self.response)
         return self.response
 
@@ -93,42 +142,48 @@ class ResponseObject(object):
 
 
 
-def rabbitMQwritecall(message):
-	connection = pika.BlockingConnection(pika.ConnectionParameters(host='rmq'))
-	channel = connection.channel()
-	channel.queue_declare(queue='writeQ', durable = True)
+# def rabbitMQwritecall(message):
+# 	connection = pika.BlockingConnection(pika.ConnectionParameters(host='rmq'))
+# 	channel = connection.channel()
+# 	channel.queue_declare(queue='writeQ', durable = True)
 
-	channel.basic_publish(
-		exchange='',
-		routing_key='writeQ',
-		body=json.dumps(message))
+# 	channel.basic_publish(
+# 		exchange='',
+# 		routing_key='writeQ',
+# 		body=json.dumps(message))
 
-	print(" [x] Sent %r" % message)
+# 	print(" [x] Sent %r" % message)
 	
 
 
 	
-
 
 @app.route("/api/v1/db/write",methods=["POST"])
 def write_db():
     #access book name sent as JSON object
     #in POST request body
     message = request.get_json()
+    writeRespObj = writeResponseObject()
+    wresp = writeRespObj.call(message).decode()
+    res = json.loads(wresp)
 
-    rabbitMQwritecall(message)
-    return Response(status=200) 
+    del(writeRespObj)
+    #rabbitMQwritecall(message)
+    return Response(status=res["status"])
+
+
 
 @app.route("/api/v1/db/read",methods=["POST"])
 def read_db():
-	message = request.get_json()
-	respObj = ResponseObject()
+    message = request.get_json()
+    respObj = ResponseObject()
 
-	response = respObj.call(message).decode()
-	print(" [.] Got Response for READ:%r" % response)
+    response = respObj.call(message).decode()
+    del(respObj)
+    print(" [.] Got Response for READ:%r" % response)
 	#rabbitMQreadcall(message)
-	return response
-	
+    return response
+
 	
 
 '''
