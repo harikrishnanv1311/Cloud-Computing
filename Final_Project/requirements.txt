@@ -4,3 +4,4 @@ kazoo
 flask
 requests
 uuid
+docker

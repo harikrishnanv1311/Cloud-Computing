@@ -24,28 +24,36 @@ import os
 # con.commit()
 
 path=""
-if(sys.argv[1]=="0"):
-    #print("Sys.arg val for Slave is:",sys.argv[1])
-    # cont_id = os.popen("hostname").read().strip()
-    # print(cont_id)
+# if(sys.argv[1]=="0"):
+#     #print("Sys.arg val for Slave is:",sys.argv[1])
+#     # cont_id = os.popen("hostname").read().strip()
+#     # print(cont_id)
 
-    path = "appff83d85e04db.db"
+#     path = "appff83d85e04db.db"
 
 
-if(sys.argv[1]=="1"):
-    #print("Sys.arg val for Master is:",sys.argv[1])
-    # cont_id = os.popen("hostname").read().strip()
-    # print(cont_id)
+# if(sys.argv[1]=="1"):
+#     #print("Sys.arg val for Master is:",sys.argv[1])
+#     # cont_id = os.popen("hostname").read().strip()
+#     # print(cont_id)
 
-    path = "appde4c33ae6ecb.db"
+#     path = "appde4c33ae6ecb.db"
+def creation_sync(query):
+    with sqlite3.connect(path) as con:
+        cur = con.cursor()
+        q = query.decode()
+        print("q is:",q," and it's type is:",type(q))
+        cur.execute(q)
+        print("Query '"+q+"' Successfully executed")
 
-def syncQueryExecute(ch, method, props, body):
+def updationQueryExecute(ch, method, props, body):
     with sqlite3.connect(path) as con:
         cur = con.cursor()
         q = body.decode()
         print("q is:",q," and it's type is:",type(q))
         cur.execute(q)
         print("Query '"+q+"' Successfully executed")
+        ch.basic_ack(delivery_tag=method.delivery_tag)
 
 
 def callbackread(ch, method, props, body):
@@ -164,7 +172,9 @@ def callbackwrite(ch, method, properties, body):
                     cur.execute(q)
                     print("enter 3")
                     con.commit()
+
                     ch.basic_publish(exchange='fan', routing_key='', body=q)
+                    ch.basic_publish(exchange='', routing_key='syncQ', body=q)
 
                     s = {"status":201}
 
@@ -218,7 +228,8 @@ def callbackwrite(ch, method, properties, body):
                     q="INSERT into rides (rideId,created_by,ride_users,timestamp,source,destination) values ("+str(m+1)+",'"+created_by+"','"+ride_users+"','"+timestamp+"','"+source+"','"+destination+"')"      
                     
                     ch.basic_publish(exchange='fan', routing_key='', body=q)
-                    
+                    ch.basic_publish(exchange='', routing_key='syncQ', body=q)
+
                     s = {"status":201}
 
                     ch.basic_publish(exchange='',
@@ -278,6 +289,8 @@ def callbackwrite(ch, method, properties, body):
                         con.commit()
 
                         ch.basic_publish(exchange='fan', routing_key='', body=query)
+                        ch.basic_publish(exchange='', routing_key='syncQ', body=query)
+
                         s = {"status":200}
 
                         ch.basic_publish(exchange='',
@@ -331,6 +344,8 @@ def callbackwrite(ch, method, properties, body):
                         cur.execute(q)
                         con.commit()
                         ch.basic_publish(exchange='fan', routing_key='', body=q)
+                        ch.basic_publish(exchange='', routing_key='syncQ', body=q)
+
                         s = {"status":200}
 
                         ch.basic_publish(exchange='',
@@ -376,6 +391,8 @@ def callbackwrite(ch, method, properties, body):
                         con.commit()
 
                         ch.basic_publish(exchange='fan', routing_key='', body=q)
+                        ch.basic_publish(exchange='', routing_key='syncQ', body=q)
+
                         s = {"status":200}
 
                         ch.basic_publish(exchange='',
@@ -408,10 +425,10 @@ def callbackwrite(ch, method, properties, body):
 if(sys.argv[1]=="1"):
     print("Sys.arg val for Master is:",sys.argv[1])
 
-    # cont_id = os.popen("hostname").read().strip()
-    # print(cont_id)
+    cont_id = os.popen("hostname").read().strip()
+    print("Master Container ID:",cont_id)
 
-    #path = "appde4c33ae6ecb.db"
+    path = "app_"+str(cont_id)+".db"
 
     con = sqlite3.connect(path)
 
@@ -428,7 +445,7 @@ if(sys.argv[1]=="1"):
     channel.queue_declare(queue='writeQ', durable=True)
     channel.queue_declare(queue='writeResponseQ', durable=True)
     channel.exchange_declare(exchange='fan',exchange_type='fanout')
-    
+    channel.queue_declare(queue='syncQ',durable=True)
     # channel.queue_declare(queue='syncQ', durable=True)
     print(' [*] Waiting for messages.')
     channel.basic_consume(queue='writeQ', on_message_callback=callbackwrite)
@@ -438,10 +455,10 @@ if(sys.argv[1]=="1"):
 if(sys.argv[1]=="0"):
     print("Sys.arg val for Slave is:",sys.argv[1])
     
-    # cont_id = os.popen("hostname").read().strip()
-    # print(cont_id)
+    cont_id = os.popen("hostname").read().strip()
+    print("Slave Container ID:",cont_id)
 
-    #path = "appff83d85e04db.db"
+    path = "app_"+str(cont_id)+".db"
 
     con = sqlite3.connect(path)
 
@@ -456,13 +473,26 @@ if(sys.argv[1]=="0"):
     connection = pika.BlockingConnection(
     pika.ConnectionParameters(host='rmq'))
     channel = connection.channel()
+
+    syncChannel = connection.channel()
+
+    ret = syncChannel.queue_declare(queue='syncQ', durable=True)
+    while(ret.method.message_count!=0):
+        res = syncChannel.basic_get(queue='syncQ',auto_ack=False)
+        creation_sync(res[2])
+        ret = syncChannel.queue_declare(queue='syncQ',durable=True)
+
+    print("Sync Successful!")
+    syncChannel.close()
+
+    updationQ = "updationQ_"+str(cont_id)
     channel.queue_declare(queue='readQ', durable=True)
-    channel.queue_declare(queue='syncQ', durable=True)
+    channel.queue_declare(queue=updationQ, durable=True)
 
     channel.exchange_declare(exchange='fan',exchange_type='fanout')
-    channel.queue_bind(exchange='fan',queue='syncQ')
+    channel.queue_bind(exchange='fan',queue=updationQ)
 
-    channel.basic_consume(queue='syncQ', on_message_callback=syncQueryExecute)
+    channel.basic_consume(queue=updationQ, on_message_callback=updationQueryExecute)
     # channel.queue_declare(queue='syncQ', durable=True)
     print(' [*] Waiting for messages.')
     channel.basic_consume(queue='readQ', on_message_callback=callbackread)
