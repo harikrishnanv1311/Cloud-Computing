@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from flask import Flask,render_template,jsonify,request,abort,Response
 import threading
+import os
 import time
 import sqlite3
 import requests
@@ -13,8 +14,15 @@ import json
 import pika
 import sys
 import uuid
+from kazoo.client import KazooClient
+from kazoo.client import KazooState
+import logging
 
-############################### FLASK, DB SETUP ##################################
+
+
+
+logging.basicConfig()
+############################### FLASK, ZOOKEEPER SETUP ##################################
 
 
 
@@ -36,7 +44,9 @@ import uuid
 
 app = Flask(__name__)
 
-
+zk = KazooClient(hosts='zoo:2181')
+zk.start()
+zk.ensure_path("/orchestrator")
 # manager = Manager(app)
 # manager.add_command('runserver', CustomServer())
 
@@ -44,6 +54,84 @@ master_container_detail={}
 slave_container_detail={}
 
 first_request = True
+
+first_zoo_event_req = True
+
+crash_pid_flag = 0
+
+
+
+@zk.ChildrenWatch("/orchestrator")
+def f(ch):
+    print()
+    print("Orchestrator:(f()) Event Just got Triggered!")
+    global first_zoo_event_req
+    global crash_pid_flag
+    if(first_zoo_event_req):
+        first_zoo_event_req = False
+
+
+    else:
+        print(ch)
+        
+        if(crash_pid_flag):
+            crash_pid_flag=0
+            print("Orchestrator:(f()) Adding a Slave as the previous one crashed!")
+            requests.post('http://localhost:80/api/v1/create/slave')
+
+        else:
+            
+            m=0
+            lowest=-1
+            corres_c=""
+
+            for c in ch:
+                print("Orchestrator:(f()) Iteration at 'c':",c," & type of 'c':",type(c))
+                
+                d,s = zk.get("/orchestrator/"+c)
+                m_or_s = d.decode("utf-8").split(",")[0]
+                pid = int(d.decode("utf-8").split(",")[1])
+                #If data is not empty and data==master
+                if(m_or_s == "master"):
+                        m=1
+                        print("Orchestrator:(f()) Master Exists!")
+                else:
+                    if(lowest==-1):
+                        lowest=pid
+                    if(pid<=lowest):
+                        lowest=pid
+                        corres_c=c
+                            
+            #Making the first node in the list as the master
+
+            if(m==0):
+                print("Orchestrator:(f()) As Master wasn't found, changing Slave to Master")
+                strin="master,"+str(lowest)
+                zk.set("/orchestrator/"+corres_c,strin.encode('utf-8'))
+                print("Orchestrator:(f()) /orchestrator/"+corres_c+" is the New Master!")
+                master_container_detail[lowest] = slave_container_detail[lowest]
+                slave_container_detail.pop(lowest)
+                requests.post('http://localhost:80/api/v1/create/slave')
+
+
+
+
+def crash_slave_scaler():
+    global slave_container_detail
+        
+    m=-1
+    for pid in slave_container_detail:
+        if(m<pid):
+            m=pid
+    if(m>-1):
+        resp=slave_delete_con(m)
+        if(resp==200):
+            return "Scaled-down by 1!"
+    
+    return "Couldn't Scale Down!"
+        
+
+
 
 def scaler():
     n=1
@@ -53,16 +141,23 @@ def scaler():
     total_requests = j["total_requests"]
         
     if(total_requests!=0):
-        n = math.ceil(total_requests/20)
+        n = math.ceil(total_requests/5)
         
     j["total_requests"]=0
     
     with open("request_count.json","w") as file:
         json.dump(j,file)
     
+    timer = threading.Timer(60.0, scaler)
+    timer.start()
+
     run=1
     while(run):
-        print("Length of slave_container_detail:",len(slave_container_detail))
+        print()
+        #print("Length of slave_container_detail:",len(slave_container_detail))
+        print("Orchestrator:(scaler()) master_container_detail:",master_container_detail)
+        print("Orchestrator:(scaler()) slave_container_detail:",slave_container_detail)
+
         if(len(slave_container_detail)==n):
             run=0
 
@@ -71,13 +166,13 @@ def scaler():
             if(x):
                 print("Slave Added")
         if(len(slave_container_detail)>n):
-            x=requests.post('http://localhost:80/api/v1/crash/slave')
+            x=crash_slave_scaler()
             if(x):
                 print("Slave Killed")
+                
         
 
-    timer = threading.Timer(120.0, scaler)
-    timer.start()
+    
 
 
                 
@@ -175,20 +270,6 @@ class ResponseObject(object):
 
 
 
-def master_delete_con(ppid):
-    v=master_container_detail[ppid]
-    v.remove(force= True)
-    print("Removed Master Container with "+str(ppid)+" Pid!")
-    master_container_detail.pop(ppid)
-    return 200
-
-def slave_delete_con(ppid):
-    v=slave_container_detail[ppid]
-    v.remove(force= True)
-    print("Removed Slave Container with "+str(ppid)+" Pid!")
-    slave_container_detail.pop(ppid)
-    return 200
-
 
 @app.route("/api/v1/db/write",methods=["POST"])
 def write_db():
@@ -197,8 +278,9 @@ def write_db():
     global first_request
     global slave_container_detail
     global master_container_detail
+
     if(first_request):
-        timer = threading.Timer(120.0, scaler)
+        timer = threading.Timer(60.0, scaler)
         timer.start()
         first_request = False
         with open("request_count.json","w") as file:
@@ -207,12 +289,12 @@ def write_db():
             json.dump(count,file)
 
     if(len(master_container_detail)==0 and len(slave_container_detail)==0):
-        x = requests.post("http://localhost:80/api/v1/create/master")
+        #x = requests.post("http://localhost:80/api/v1/create/master")
+        print("Orchestrator:(write_db()) First Request Received, Spawning a Slave!")
         y = requests.post("http://localhost:80/api/v1/create/slave")
-        if(x):
-            print("Created Initial Master")
         if(y):
-            print("Created Initial Slave")
+            print()
+            print("Orchestrator:(write_db()) Created Initial Slave")
 
     message = request.get_json()
     writeRespObj = writeResponseObject()
@@ -230,8 +312,9 @@ def read_db():
     global first_request
     global slave_container_detail
     global master_container_detail
+
     if(first_request):
-        timer = threading.Timer(120.0, scaler)
+        timer = threading.Timer(60.0, scaler)
         timer.start()
         first_request = False
         with open("request_count.json","w") as file:
@@ -242,12 +325,11 @@ def read_db():
         return Response(status=400)
 
     if(len(master_container_detail)==0 and len(slave_container_detail)==0):
-        x = requests.post("http://localhost:80/api/v1/create/master")
+        #x = requests.post("http://localhost:80/api/v1/create/master")
         y = requests.post("http://localhost:80/api/v1/create/slave")
-        if(x):
-            print("Created Initial Master")
         if(y):
-            print("Created Initial Slave")
+            print()
+            print("Orchestrator:(read_db()) Created Initial Slave")
 
     with open("request_count.json","r") as file:
         j = json.load(file)
@@ -264,26 +346,54 @@ def read_db():
 
     response = respObj.call(message).decode()
     del(respObj)
-    print(" [.] Got Response for READ:%r" % response)
+    print()
+    print(" Orchestrator:(read_db()) Got Response for READ:%r" % response)
 	#rabbitMQreadcall(message)
     return response
 
 
-@app.route("/api/v1/create/master",methods=["POST"])
-def create_con_master():
-    #global slave_container_detail
-    global master_container_detail
-    client = docker.from_env()
-    client.images.build(path=".", tag="master")    
-    client.containers.create("master",detach=True)
-    v=client.containers.run("master",command="python worker.py 1",network='zookeeper_amqp_default',links={'rmq':'rmq'},detach=True)
-    print ("New Master created!")
-    #print("TOP ELEMENTS:",docker.top)
-    #print("TOP ELEMENTS:",v.top())
-    ppid = int(v.top()['Processes'][0][2])
+
+########################################## NON-API WRAPPED FUNCTIONS ############################
+
+def master_delete_con(ppid):
+    v=master_container_detail[ppid]
+    v.remove(force= True)
+    print()
+    print("Orchestrator:(master_delete_con()) Removed Master Container with "+str(ppid)+" Pid!")
+    master_container_detail.pop(ppid)
+    return 200
+
+def slave_delete_con(ppid):
+    global crash_pid_flag
+    v=slave_container_detail[ppid]
     
-    master_container_detail[ppid]=v
-    return "Created"
+    v.remove(force= True)
+    print()
+    print("Orchestrator:(slave_delete_con()) Removed Slave Container with "+str(ppid)+" Pid!")
+    slave_container_detail.pop(ppid)
+    return 200
+
+#################################################################################################
+
+# @app.route("/api/v1/create/master",methods=["POST"])
+# def create_con_master():
+#     #global slave_container_detail
+#     global master_container_detail
+#     client = docker.from_env()
+#     client.images.build(path=".", tag="master")    
+#     client.containers.create("master",detach=True)
+
+#     cont_id = os.popen("hostname").read().strip()
+#     print("Orchestrator Container ID:",cont_id)
+    
+#     v=client.containers.run("master",command="python worker.py 1",network='zookeeper_amqp_default',links={'rmq':'rmq'},detach=True,volumes_from=[cont_id])
+#     print ("New Master created!")
+#     #print("TOP ELEMENTS:",docker.top)
+#     #print("TOP ELEMENTS:",v.top())
+#     ppid = int(v.top()['Processes'][0][2])
+    
+#     master_container_detail[ppid]=v
+#     return "Created"
 
 	
 @app.route("/api/v1/create/slave",methods=["POST"])
@@ -293,13 +403,21 @@ def create_con_slave():
     client = docker.from_env()
     client.images.build(path=".", tag="slave")    
     client.containers.create("slave",detach=True)
-    v=client.containers.run("slave",command="python worker.py 0",network='zookeeper_amqp_default',links={'rmq':'rmq'},detach=True)
-    print ("New Slave created!")
+
+    cont_id = os.popen("hostname").read().strip()
+    print()
+    print("Orchestrator:(create_con_slave()) Orchestrator's Container ID:",cont_id)
+    
+    #v=client.containers.run("slave",command="python worker.py",auto_remove=True,network='zookeeper_amqp_default',links={'rmq':'rmq','zoo':'zoo'},detach=True,volumes_from=[cont_id])
+
+    v=client.containers.run("slave",command="python worker.py",network='zookeeper_amqp_default',links={'rmq':'rmq'},detach=True,volumes_from=[cont_id])
+    #volumes={"/var/run/docker.sock":{"bind":"/var/run/docker.sock","mode":"rw"},{"/usr/bin/docker":{"bind":"/usr/bin/docker","mode":"rw"}}})
+    print ("Orchestrator:(create_con_slave()) New Slave created!")
     #print("TOP ELEMENTS:",docker.top)
     #print("TOP ELEMENTS:",v.top())
     ppid = int(v.top()['Processes'][0][2])
     slave_container_detail[ppid]=v
-    print("PPID is ",ppid)
+    print("Orchestrator:(create_con_slave()) PPID is ",ppid)
     return "Created"
 
 
@@ -321,6 +439,7 @@ def crash_master():
 @app.route("/api/v1/crash/slave", methods=["POST"])
 def crash_slave():
     global slave_container_detail
+    global crash_pid_flag
     # global master_container_detail
     if(request.method=="POST"):
         
@@ -329,6 +448,7 @@ def crash_slave():
             if(m<pid):
                 m=pid
         if(m>-1):
+            crash_pid_flag=1
             resp=slave_delete_con(m)
             if(resp==200):
                 return jsonify([m])
@@ -364,140 +484,9 @@ if __name__=="__main__":
     
 
     
-	
+#################################################################################################
 
-
-
-################################################################################################
-
-
-
-
+'''Changes Made:
+--> Added auto_remove=True for creation
+--> Removed time.sleep(2) from f()
 '''
-@app.route("/api/v1/db/read",methods=["POST"])
-def read_db():
-    #access book name sent as JSON object
-    #in POST request body
-    table=request.get_json()["table"]
-    insert=request.get_json()["insert"]
-    where_flag=request.get_json()["where_flag"]
-    cols=""
-    l=len(insert)
-    for i in insert:
-        l-=1
-        cols+=i
-        if(l!=0):
-            cols+=","
-    #print(cols)
-    #print(type(cols))
-    if(table=="users"):
-        ##print(type(p))
-        try:
-            with sqlite3.connect(path) as con:
-                #return "table is %s, username is %s, password is %s"%(table,u,p)
-                cur = con.cursor()
-                #print("hi")
-                if(where_flag):
-                    where=request.get_json()["where"]
-                    query="SELECT "+cols+" from users WHERE "+where
-                else:
-                    query="SELECT "+cols+" from users"
-                #print(query)
-                cur.execute(query)
-                #print("hello")
-                con.commit()
-                status=201
-                s=""
-                for i in cur:
-                    s = s + str(i) + "\n"
-                    # #print(type(i))
-                return jsonify({"string":s})
-        except:
-       
-               return Response(status=400)
-    else:   #rides
-        try:
-            with sqlite3.connect(path) as con:
-                #return "table is %s, username is %s, password is %s"%(table,u,p)
-                cur = con.cursor()
-                #print("BEFORE EXEC")
-                if(where_flag):
-                    where=request.get_json()["where"]
-                    query="SELECT "+cols+" from rides WHERE "+where
-                else:
-                    query="SELECT "+cols+" from rides"
-                #print(query)
-                cur.execute(query)
-                #print("AFTER EXEC")
-                con.commit()
-                status=201
-                s=""
-                for i in cur:
-                    s = s + str(i) + "\n"
-                return jsonify({"string":s})
-        except:
-                return Response(status=400)
-    return s
-'''
-
-
-
-    # time.sleep(30)
-    #print(v.labels)
-    # v.remove(force=True)
-   # print(client.info())
-
-    #print("After trying to delete:",v.top())
-    # v = client.containers.run("slave"+str(i),rm=True)
-   
-    #client.images.build(path=".", tag="slave12")    #print(client.containers.run("zookeeper_amqp_master_1"))
-    # for container in client.containers.list():
-    #     print(container.name)
-    # client.containers.run("zookeeper_amqp_slave",["python3","worker.py","0"]
-    #for i in range(2):
-    #client.containers.create("slave12",detach=False)
-    #client.containers.run("slave121",command="python worker.py 0",network='zookeeper_amqp_default',links={'rmq':'rmq'},detach=True)
-
-
-
-# def CB(corr_id):
-# def onresponse(ch, method, props, body):
-#       # if(corr_id==props.corr_id):
-#       print("Response is :" ,body)
-
-# def rabbitMQreadcall(message):
-#   connection = pika.BlockingConnection(pika.ConnectionParameters(host='rmq'))
-#   channel = connection.channel()
-#   channel.queue_declare(queue='readQ', durable = True)
-#   channel.queue_declare(queue='responseQ',durable = True)
-    
-#   # corr_id = str(uuid.uuid4())
-
-#   channel.basic_publish(
-#       exchange='',
-#       routing_key='readQ',
-#       properties=pika.BasicProperties(
-#               reply_to = "responseQ"
-#           ),
-#       body=json.dumps(message))
-
-#   print(" [x] Sent %r"% message)
-
-#   # onresponse = CB(corr_id)
-#   channel.basic_get(
-#       queue='responseQ',
-#       on_message_callback=onresponse
-#       )
-#   print(" After consuming!")
-
-# def rabbitMQwritecall(message):
-#   connection = pika.BlockingConnection(pika.ConnectionParameters(host='rmq'))
-#   channel = connection.channel()
-#   channel.queue_declare(queue='writeQ', durable = True)
-
-#   channel.basic_publish(
-#       exchange='',
-#       routing_key='writeQ',
-#       body=json.dumps(message))
-
-#   print(" [x] Sent %r" % message)
