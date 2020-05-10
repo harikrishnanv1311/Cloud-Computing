@@ -35,7 +35,7 @@
 &nbsp;&nbsp;3. user <br>
 &nbsp;&nbsp;4. CCfinal.pem <br>
 
-&nbsp;&nbsp;<b> The "CCfinal.pem" is used for all the 3 instances. </b><br>
+&nbsp;<b> The "CCfinal.pem" is used for all the 3 instances. </b><br>
 
 
 To run the <b>User</b> container:<br>
