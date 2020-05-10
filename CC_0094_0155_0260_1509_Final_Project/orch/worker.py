@@ -51,6 +51,9 @@ updationQ=""
 path = "app_"+str(cont_id)+".db"
 
 
+ipaddr = "http://35.169.72.238"
+ipaddr_user = "http://34.236.8.161"
+ipaddr_ride = "http://3.208.45.172"
 
 
 
@@ -133,6 +136,7 @@ def callbackread(ch, method, props, body):
                 '''
 
                 print("Users List:",s)
+
         except:
                 print(e)
                #return Response(status=400)
@@ -158,6 +162,7 @@ def callbackread(ch, method, props, body):
                 #return jsonify({"string":s})
                 print("Either list_source_to_destination or list_details of rides:")
                 print(s)
+                
         except:
                 print(e)
                 #return Response(status=400)
@@ -200,7 +205,7 @@ def callbackwrite(ch, method, properties, body):
                     ch.basic_publish(exchange='fan', routing_key='', body=q)
                     ch.basic_publish(exchange='', routing_key='syncQ', body=q)
 
-                    s = {"status":201}
+                    s = {"status":"201"}
 
                     ch.basic_publish(exchange='',
                         routing_key=properties.reply_to,
@@ -208,7 +213,7 @@ def callbackwrite(ch, method, properties, body):
                         body=json.dumps(s))
                     #return Response(status=201)
             except Exception as e:
-                s = {"status":400}
+                s = {"status":"400"}
                 print(e)
                 ch.basic_publish(exchange='',
                         routing_key=properties.reply_to,
@@ -254,7 +259,7 @@ def callbackwrite(ch, method, properties, body):
                     ch.basic_publish(exchange='fan', routing_key='', body=q)
                     ch.basic_publish(exchange='', routing_key='syncQ', body=q)
 
-                    s = {"status":201}
+                    s = {"status":"201"}
 
                     ch.basic_publish(exchange='',
                         routing_key=properties.reply_to,
@@ -265,7 +270,7 @@ def callbackwrite(ch, method, properties, body):
                     status=201
                     #return Response(status=201)
             except Exception as e:
-                s = {"status":400}
+                s = {"status":"400"}
 
                 ch.basic_publish(exchange='',
                         routing_key=properties.reply_to,
@@ -315,7 +320,7 @@ def callbackwrite(ch, method, properties, body):
                         ch.basic_publish(exchange='fan', routing_key='', body=query)
                         ch.basic_publish(exchange='', routing_key='syncQ', body=query)
 
-                        s = {"status":200}
+                        s = {"status":"200"}
 
                         ch.basic_publish(exchange='',
                             routing_key=properties.reply_to,
@@ -325,7 +330,7 @@ def callbackwrite(ch, method, properties, body):
                         print("Joined Ride!")
 
                     else:
-                        s = {"status":400}
+                        s = {"status":"400"}
 
                         ch.basic_publish(exchange='',
                             routing_key=properties.reply_to,
@@ -334,7 +339,7 @@ def callbackwrite(ch, method, properties, body):
                         #return Response(status=400)
                         print("Duplicate User!")
                 else:
-                    s = {"status":400}
+                    s = {"status":"400"}
 
                     ch.basic_publish(exchange='',
                         routing_key=properties.reply_to,
@@ -343,7 +348,7 @@ def callbackwrite(ch, method, properties, body):
                     print("Ride doesn't exist!")
                     #return Response(status=400)
         except Exception as e:
-            s = {"status":405}
+            s = {"status":"405"}
 
             ch.basic_publish(exchange='',
                     routing_key=properties.reply_to,
@@ -370,7 +375,7 @@ def callbackwrite(ch, method, properties, body):
                         ch.basic_publish(exchange='fan', routing_key='', body=q)
                         ch.basic_publish(exchange='', routing_key='syncQ', body=q)
 
-                        s = {"status":200}
+                        s = {"status":"200"}
 
                         ch.basic_publish(exchange='',
                             routing_key=properties.reply_to,
@@ -380,7 +385,7 @@ def callbackwrite(ch, method, properties, body):
                         print("Ride Deleted Successfully")
                         #return Response(status=200)
                     else:
-                        s = {"status":400}
+                        s = {"status":"400"}
 
                         ch.basic_publish(exchange='',
                             routing_key=properties.reply_to,
@@ -389,7 +394,7 @@ def callbackwrite(ch, method, properties, body):
                         print("Ride doesn't exist!")
                         #return Response(status=400)
         except Exception as e:
-            s = {"status":500}
+            s = {"status":"500"}
 
             ch.basic_publish(exchange='',
                     routing_key=properties.reply_to,
@@ -417,7 +422,7 @@ def callbackwrite(ch, method, properties, body):
                         ch.basic_publish(exchange='fan', routing_key='', body=q)
                         ch.basic_publish(exchange='', routing_key='syncQ', body=q)
 
-                        s = {"status":200}
+                        s = {"status":"200"}
 
                         ch.basic_publish(exchange='',
                             routing_key=properties.reply_to,
@@ -426,7 +431,7 @@ def callbackwrite(ch, method, properties, body):
                         print("User Deleted Successfully!")
                         #return Response(status=200)
                     else:
-                        s = {"status":400}
+                        s = {"status":"400"}
 
                         ch.basic_publish(exchange='',
                             routing_key=properties.reply_to,
@@ -435,14 +440,44 @@ def callbackwrite(ch, method, properties, body):
                         print("User doesn't exist!")
                         #return Response(status=400)
         except Exception as e:
-            s = {"status":400}
-
+            s = {"status":"400"}
+            print(e)
             ch.basic_publish(exchange='',
                     routing_key=properties.reply_to,
                     properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                     body=json.dumps(s))
-            print(e)
+            
             #eturn Response(status=400)
+    if(join==4):
+        try:
+            with sqlite3.connect(path) as con:
+                cur=con.cursor()
+                cur.execute('DELETE FROM users')
+                cur.execute('DELETE FROM rides')
+                con.commit()
+                print("Database Deleted Successfully!")
+                q1='DELETE FROM users'
+                q2='DELETE FROM rides'
+                ch.basic_publish(exchange='fan', routing_key='', body=q1)
+                ch.basic_publish(exchange='fan', routing_key='', body=q2)
+                ch.basic_publish(exchange='', routing_key='syncQ', body=q1)
+                ch.basic_publish(exchange='', routing_key='syncQ', body=q2)
+                s = {"status":"200"}
+                ch.basic_publish(exchange='',
+                    routing_key=properties.reply_to,
+                    properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                    body=json.dumps(s))
+
+
+        except Exception as e:
+            s={"status":"500"}
+            print("Couldn't Delete DB!")
+            print(e)
+            ch.basic_publish(exchange='',
+                    routing_key=properties.reply_to,
+                    properties=pika.BasicProperties(correlation_id =properties.correlation_id),
+                    body=json.dumps(s))
+
     ch.basic_ack(delivery_tag = method.delivery_tag)
 
 
@@ -468,26 +503,38 @@ def run_as_slave():
 
     print()
     print("Worker:(run_as_slave()) Running as Slave!")
-    syncChannel = connection.channel()
+    
 
-    ret = syncChannel.queue_declare(queue='syncQ', durable=True)
-    while(ret.method.message_count!=0):
-        res = syncChannel.basic_get(queue='syncQ',auto_ack=False)
-        creation_sync(res[2])
-        ret = syncChannel.queue_declare(queue='syncQ',durable=True)
+    try:
+        syncChannel = connection.channel()
+        ret = syncChannel.queue_declare(queue='syncQ', durable=True)
+        while(ret.method.message_count!=0):
+            res = syncChannel.basic_get(queue='syncQ',auto_ack=False)
+            creation_sync(res[2])
+            ret = syncChannel.queue_declare(queue='syncQ',durable=True)
 
-    print("Worker:(run_as_slave()) Sync Successful!")
-    syncChannel.close()
+        print("Worker:(run_as_slave()) Sync Successful!")
+        syncChannel.close()
 
-    print("Worker:(run_as_slave) syncChannel Closed!")
+        print("Worker:(run_as_slave) syncChannel Closed!")
+    except:
+        print("---------------------------------------------")
+        print("run_as_slave [syncing] EXCEPTION!")
+        print("---------------------------------------------")
 
-    updationQ = "updationQ_"+str(cont_id)
-    channel.queue_declare(queue='readQ', durable=True)
-    channel.queue_declare(queue=updationQ, durable=True) #auto_delete=True)
-    print('Worker:(run_as_slave()) UpdationQ created as:',updationQ)
-    channel.exchange_declare(exchange='fan',exchange_type='fanout')
-    channel.queue_bind(exchange='fan',queue=updationQ)
-    print('Worker:(run_as_slave()) Fan Exchange Created!')
+    try:
+        updationQ = "updationQ_"+str(cont_id)
+        channel.queue_declare(queue='readQ', durable=True)
+        channel.queue_declare(queue=updationQ, durable=True) #auto_delete=True)
+        print('Worker:(run_as_slave()) UpdationQ created as:',updationQ)
+        channel.exchange_declare(exchange='fan',exchange_type='fanout')
+        channel.queue_bind(exchange='fan',queue=updationQ)
+        print('Worker:(run_as_slave()) Fan Exchange Created!')
+    except:
+        print("---------------------------------------------")
+        print("run_as_slave [updationQ creation] EXCEPTION!")
+        print("---------------------------------------------")
+    
     try:
         channel.basic_consume(queue=updationQ, on_message_callback=updationQueryExecute)
     except:

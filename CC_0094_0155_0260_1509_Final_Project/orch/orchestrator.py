@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from flask import Flask,render_template,jsonify,request,abort,Response
+from flask_cors import CORS
 import threading
 import os
 import time
@@ -43,12 +44,23 @@ logging.basicConfig()
 
 
 app = Flask(__name__)
+CORS(app)
+
+
+
+
+
 
 zk = KazooClient(hosts='zoo:2181')
 zk.start()
 zk.ensure_path("/orchestrator")
 # manager = Manager(app)
 # manager.add_command('runserver', CustomServer())
+
+ipaddr = "http://35.169.72.238"
+ipaddr_user = "http://34.236.8.161"
+ipaddr_ride = "http://3.208.45.172"
+
 
 master_container_detail={}
 slave_container_detail={}
@@ -77,7 +89,7 @@ def f(ch):
         if(crash_pid_flag):
             crash_pid_flag=0
             print("Orchestrator:(f()) Adding a Slave as the previous one crashed!")
-            requests.post('http://localhost:80/api/v1/create/slave')
+            requests.post("http://localhost:80/api/v1/create/slave")
 
         else:
             
@@ -111,7 +123,7 @@ def f(ch):
                 print("Orchestrator:(f()) /orchestrator/"+corres_c+" is the New Master!")
                 master_container_detail[lowest] = slave_container_detail[lowest]
                 slave_container_detail.pop(lowest)
-                requests.post('http://localhost:80/api/v1/create/slave')
+                requests.post("http://localhost:80/api/v1/create/slave")
 
 
 
@@ -141,14 +153,14 @@ def scaler():
     total_requests = j["total_requests"]
         
     if(total_requests!=0):
-        n = math.ceil(total_requests/5)
+        n = math.ceil(total_requests/20)
         
     j["total_requests"]=0
     
     with open("request_count.json","w") as file:
         json.dump(j,file)
     
-    timer = threading.Timer(60.0, scaler)
+    timer = threading.Timer(120.0, scaler)
     timer.start()
 
     run=1
@@ -162,7 +174,7 @@ def scaler():
             run=0
 
         if(len(slave_container_detail)<n):
-            x=requests.post('http://localhost:80/api/v1/create/slave')
+            x=requests.post("http://localhost:80/api/v1/create/slave")
             if(x):
                 print("Slave Added")
         if(len(slave_container_detail)>n):
@@ -280,7 +292,7 @@ def write_db():
     global master_container_detail
 
     if(first_request):
-        timer = threading.Timer(60.0, scaler)
+        timer = threading.Timer(120.0, scaler)
         timer.start()
         first_request = False
         with open("request_count.json","w") as file:
@@ -297,13 +309,16 @@ def write_db():
             print("Orchestrator:(write_db()) Created Initial Slave")
 
     message = request.get_json()
+    print("Orchestrator:(write_db()) Write Request is:",message)
     writeRespObj = writeResponseObject()
     wresp = writeRespObj.call(message).decode()
     res = json.loads(wresp)
+    with open("write_request.json","a") as file:
+        json.dump(message,file)
 
     del(writeRespObj)
     #rabbitMQwritecall(message)
-    return Response(status=res["status"])
+    return res["status"]
 
 
 
@@ -314,12 +329,12 @@ def read_db():
     global master_container_detail
 
     if(first_request):
-        timer = threading.Timer(60.0, scaler)
+        timer = threading.Timer(120.0, scaler)
         timer.start()
         first_request = False
         with open("request_count.json","w") as file:
             count={}
-            count["total_requests"]=0
+            count["total_requests"]=1
             json.dump(count,file)
 
         return Response(status=400)
@@ -330,24 +345,28 @@ def read_db():
         if(y):
             print()
             print("Orchestrator:(read_db()) Created Initial Slave")
-
-    with open("request_count.json","r") as file:
-        j = json.load(file)
-        
-    total_requests = j["total_requests"]
-    j["total_requests"] = total_requests + 1
-        
-    with open("request_count.json","w") as file:
-        json.dump(j,file)
+            
+    if(request.get_json()["dual_request_flag"]==1):
+        with open("request_count.json","r") as file:
+            j = json.load(file)
+            
+        total_requests = j["total_requests"]
+        j["total_requests"] = total_requests + 1
+            
+        with open("request_count.json","w") as file:
+            json.dump(j,file)
 
 
     message = request.get_json()
+    print("Read Call JSON Object:",message)
     respObj = ResponseObject()
 
     response = respObj.call(message).decode()
+    with open("write_request.json","a") as file :
+        json.dump(message,file)
     del(respObj)
     print()
-    print(" Orchestrator:(read_db()) Got Response for READ:%r" % response)
+    print(" Orchestrator:(read_db()) Got Response for READ:%r and it's type is:%r" % (response,type(response)))
 	#rabbitMQreadcall(message)
     return response
 
@@ -410,7 +429,7 @@ def create_con_slave():
     
     #v=client.containers.run("slave",command="python worker.py",auto_remove=True,network='zookeeper_amqp_default',links={'rmq':'rmq','zoo':'zoo'},detach=True,volumes_from=[cont_id])
 
-    v=client.containers.run("slave",command="python worker.py",network='zookeeper_amqp_default',links={'rmq':'rmq'},detach=True,volumes_from=[cont_id])
+    v=client.containers.run("slave",command="python worker.py",network='orch_default',links={'rmq':'rmq'},detach=True,volumes_from=[cont_id])
     #volumes={"/var/run/docker.sock":{"bind":"/var/run/docker.sock","mode":"rw"},{"/usr/bin/docker":{"bind":"/usr/bin/docker","mode":"rw"}}})
     print ("Orchestrator:(create_con_slave()) New Slave created!")
     #print("TOP ELEMENTS:",docker.top)
@@ -459,20 +478,65 @@ def crash_slave():
         return Response(status=405)
 
 
-@app.route("/api/v1/list",methods=["GET"])
+@app.route("/api/v1/worker/list",methods=["GET"])
 def list_container_pid():
     global slave_container_detail
     global master_container_detail
+    global first_request
     if(request.method=="GET"):
+        if(first_request):
+            timer = threading.Timer(120.0, scaler)
+            timer.start()
+            first_request = False
+            with open("request_count.json","w") as file:
+                count={}
+                count["total_requests"]=0
+                json.dump(count,file)
+
+        if(len(master_container_detail)==0 and len(slave_container_detail)==0):
+            #x = requests.post("http://localhost:80/api/v1/create/master")
+            print("Orchestrator:(write_db()) First Request Received, Spawning a Slave!")
+            y = requests.post("http://localhost:80/api/v1/create/slave")
+            if(y):
+                print()
+                print("Orchestrator:(write_db()) Created Initial Slave")
         l=[]
         f = master_container_detail.keys()
         s = slave_container_detail.keys()
-        l=sorted(f+s)
+        l=sorted(list(f)+list(s))
         return jsonify(l)
     else:
         return Response(status=405)
 
+@app.route("/api/v1/db/clear", methods=["POST"])
+def clear_db():
+    global first_request
+    global slave_container_detail
+    global master_container_detail
+    if(request.method=='POST'):
+        
+        if(first_request):
+            timer = threading.Timer(120.0, scaler)
+            timer.start()
+            first_request = False
+            with open("request_count.json","w") as file:
+                count={}
+                count["total_requests"]=0
+                json.dump(count,file)
 
+        if(len(master_container_detail)==0 and len(slave_container_detail)==0):
+            #x = requests.post("http://localhost:80/api/v1/create/master")
+            print("Orchestrator:(write_db()) First Request Received, Spawning a Slave!")
+            y = requests.post("http://localhost:80/api/v1/create/slave")
+            if(y):
+                print()
+                print("Orchestrator:(write_db()) Created Initial Slave")
+        data={'join':4}
+        req=requests.post("http://localhost:80/api/v1/db/write",json=data)
+        print("Req is:",req, " and req.text is:",req.text)
+        return Response(status=int(req.text))
+    else:
+        return Response(status=405)
 
 ######################################### FLASK PART ############################################
 if __name__=="__main__":

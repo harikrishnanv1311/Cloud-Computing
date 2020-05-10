@@ -20,9 +20,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: sh -c "sleep 25 && python3 orchestrator.py"
+    command: sh -c "sleep 30 && python3 orchestrator.py"
     ports:
-    - "8000:80"
+    - "80:80"
     volumes:
     - .:/code
     - /var/run/docker.sock:/var/run/docker.sock
