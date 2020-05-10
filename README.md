@@ -41,17 +41,17 @@
 To run the <b>User</b> container:<br>
 &nbsp;1. Go inside <b>user</b> folder<br>
 &nbsp;2. Open a Terminal in this folder. <br>
-&nbsp;3. Run the comand "sudo docker-compose build & docker-compose up". <br>
+&nbsp;3. Run the comand "sudo docker-compose build && docker-compose up". <br>
 
 To run the <b>Ride</b> container: <br>
 &nbsp;1. Go inside <b>ride</b> folder <br>
 &nbsp;2. Open a Terminal in this folder. <br>
-&nbsp;3. Run the coomand "sudo docker-compose build & docker-compose up". <br>
+&nbsp;3. Run the coomand "sudo docker-compose build && docker-compose up". <br>
 
 To run the <b>Orchestrator</b> container: <br>
 &nbsp;1. Go inside <b>orch</b> folder <br>
 &nbsp;2. Open a Terminal in this folder. <br>
-&nbsp;3. Run the coomand "sudo docker-compose build & docker-compose up". <br>
+&nbsp;3. Run the coomand "sudo docker-compose build && docker-compose up". <br>
  
 <br>
 
