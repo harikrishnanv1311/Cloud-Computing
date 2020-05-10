@@ -33,6 +33,10 @@
 &nbsp;&nbsp;1. orch <br>
 &nbsp;&nbsp;2. ride <br>
 &nbsp;&nbsp;3. user <br>
+&nbsp;&nbsp;4. CCfinal.pem <br>
+
+&nbsp;&nbsp;<b> The "CCfinal.pem" is used for all the 3 instances. </b><br>
+
 
 To run the <b>User</b> container:<br>
 &nbsp;1. Go inside <b>user</b> folder<br>
