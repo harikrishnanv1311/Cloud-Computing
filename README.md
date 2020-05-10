@@ -24,8 +24,10 @@
 
 ## Instructions to run Final-Project:
 
-&nbsp;Source code of the project present in directory called "CC_0094_0155_0260_1509_Final_Project" <br>
+&nbsp;Source code of the project present is in the directory called "CC_0094_0155_0260_1509_Final_Project" <br>
 &nbsp;Click Here to view it on GitHub ->[Final-Project](https://github.com/harikrishnanv1311/Cloud-Computing/tree/master/CC_0094_0155_0260_1509_Final_Project)<br>
+
+
 <br>
 &nbsp;The contents are: <br>
 &nbsp;&nbsp;1. orch <br>
