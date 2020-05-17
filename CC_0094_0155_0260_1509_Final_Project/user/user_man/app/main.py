@@ -8,42 +8,17 @@ import csv
 import datetime
 import json 
 
-# path = "app.db"
+
 areapath = "AreaNameEnum.csv"
 ipaddr = "http://35.169.72.238"
-#ipaddr="http://10.0.2.15:7000"
 ipaddr_user = "http://34.236.8.161"
 ipaddr_ride = "http://3.208.45.172"
-
-# con = sqlite3.connect("app.db")
-
-# cur=con.cursor()
-# con.execute("PRAGMA foreign_keys = ON")
-# cur.execute("CREATE TABLE IF NOT EXISTS users(username TEXT primary key NOT NULL, password TEXT NOT NULL)")
-# cur.execute("CREATE TABLE IF NOT EXISTS rides(rideId INTEGER PRIMARY KEY, created_by TEXT,ride_users TEXT, timestamp TEXT, source TEXT, destination TEXT,FOREIGN KEY (created_by) REFERENCES users (username) ON DELETE CASCADE)")
-# con.commit()
-
-# con.close()
-
-#from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 CORS(app)
 
-# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///./'
-# db = SQLAlchemy(app)
 
-# class User(db.Model):
-#     username = db.Column(db.String(80), primary_key = True, nullable = False)
-#     password = db.Column(db.String(40))
-
-# class Rides(db.Model):
-#     rideId = db.Column(db.Integer, nullable = False, primary_key = True)
-#     username = db.Column(db.String(80), nullable = False)
-#     source = db.Column(db.String(80), nullable = False)
-#     destination = db.Column(db.String(80), nullable = False)
-#     timestamp = db.Column(db.String(20), nullable = False)
-
+# Function to check date
 
 def check_date(date):
     #29-01-2020:30-20-18
@@ -59,6 +34,10 @@ def check_date(date):
     else:
         return 0
 
+#######################################################################################
+    
+    
+# API to create a new user
 
 @app.route("/api/v1/users",methods=["PUT"])
 def add_user():
@@ -75,7 +54,6 @@ def add_user():
             print(x)
             flag=len(x)
             print("HERE",flag,len(password),username)
-            # #print(flag)
             if(flag==0 and len(password)==40 and username!=""):
                 print("In")
                 data={"table":"users","username":username,"password":password,"join":0}
@@ -95,8 +73,10 @@ def add_user():
     else:
         return Response(status=405)
 
+#######################################################################################
 
 
+# API to remove user 
 
 @app.route("/api/v1/users/<username>",methods=["DELETE"])
 def del_users(username):
@@ -107,7 +87,11 @@ def del_users(username):
         return Response(status=int(req.text))
     else:
         return Response(status=405)
+    
 #######################################################################################
+
+# API to list all the users 
+
 @app.route("/api/v1/users",methods=["GET"])
 def list_users():
 
@@ -118,66 +102,14 @@ def list_users():
             data={"table":"users","insert":["username"],"where_flag":0,"dual_request_flag":1}
             req = requests.post(ipaddr+"/api/v1/db/read",json=data)
             return jsonify(req.text.split(","))
-            # with sqlite3.connect(path) as con:
-            #     cur=con.cursor()
-            #     cur.execute("SELECT username FROM users")
-            #     # print(cur)
-            #     con.commit()
-            #     status=200
-            #     for i in cur:
-            #         print(i)
-            #         # s = s + str(i[0])
-            #         s.append(str(i[0]))
-            #         print(type(i))
-            #     return jsonify(s)
-            #     # return Response(status=200)
+            
         except:
             return Response(status=400)
     else:
         return Response(status=405)
 
+
 #######################################################################################
-
-# @app.route("/api/v1/_count", methods=["GET"])
-# def requestCount():
-#     if(request.method=="GET"):
-
-#         with open("count.json","r") as jsonFile:
-#             data=json.load(jsonFile)
-
-#         temp=data["count"]
-#         l=[]
-#         l.append(temp)
-
-#         return jsonify(l),200
-
-#     else:
-#         return Response(status=405)
-
-        
-
-# @app.route("/api/v1/_count",methods=["DELETE"])
-# def del_requestCount():
-#     if(request.method=="DELETE"):
-        
-#         with open("count.json","r") as jsonFile:
-#             data=json.load(jsonFile)
-
-#         temp=data["count"]
-#         temp=0
-#         data["count"]=temp
-
-#         with open("count.json", "w") as jsonFile:
-#             json.dump(data, jsonFile)
-
-#         return jsonify(),200
-
-#     else:
-#         return Response(status=405)
-
-
-
-############################################################################
 
 
 if __name__=="__main__":
