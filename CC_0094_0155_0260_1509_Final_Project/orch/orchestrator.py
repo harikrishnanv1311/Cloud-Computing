@@ -23,62 +23,52 @@ import logging
 
 
 logging.basicConfig()
-############################### FLASK, ZOOKEEPER SETUP ##################################
 
 
-
-# def custom_call():
-#     #Your code
-#     x=requests.get("http://localhost:80/api/v1/create/master")
-#     y=requests.get("http://localhost:80/api/v1/create/slave")
-#     if(x):
-#         print("Created Initial Master")
-#     if(y):
-#         print("Created Initial Slave")
-
-# class CustomServer(Server):
-#     def __call__(self, app, *args, **kwargs):
-#         custom_call()
-#         return Server.__call__(self, app, *args, **kwargs)
-
-
-
+# Intialisation of Flask "app"
 app = Flask(__name__)
+
+
+# To support Cross Origin Resorce Sharing 
 CORS(app)
 
 
 
 
-
-
+# Establishing Connection with the Server
 zk = KazooClient(hosts='zoo:2181')
 zk.start()
 zk.ensure_path("/orchestrator")
-# manager = Manager(app)
-# manager.add_command('runserver', CustomServer())
-
-ipaddr = "http://35.169.72.238"
-ipaddr_user = "http://34.236.8.161"
-ipaddr_ride = "http://3.208.45.172"
 
 
+
+
+# master_container_detail and slave_container_detail stores the "PID" of the worker as the key and the respective docker object as the value.
 master_container_detail={}
 slave_container_detail={}
 
+# first_request flag is used to ensure that the request count timer starts immediately after the first_request is received as well as to initialise a master
+# and a slave. first_request is set to "False" after this is done.
 first_request = True
 
+# Since the zookeeper event gets triggered right after running the python file, we use this variable to check for this event to ensure that no changes are made
+# as this is not exactly an event that should be considered
 first_zoo_event_req = True
 
+
+# crash_pid_flag is used to check if a worker was killed voluntarily by the user.
 crash_pid_flag = 0
 
 
-
+# The zookeeper watcher event which watches over all the znodes present in the "/orchestrator" path.
 @zk.ChildrenWatch("/orchestrator")
 def f(ch):
     print()
     print("Orchestrator:(f()) Event Just got Triggered!")
     global first_zoo_event_req
     global crash_pid_flag
+
+    # If it is the "first_zoo_event_req", it is useless and has to be ignored.
     if(first_zoo_event_req):
         first_zoo_event_req = False
 
@@ -86,27 +76,39 @@ def f(ch):
     else:
         print(ch)
         
+        # Check if "/api/v1/crash/slave" was to kill the slave (or) if it was because of scaling up or down.
+        # As we do not have to add a new slave when they are killed because of scaling down.
         if(crash_pid_flag):
             crash_pid_flag=0
             print("Orchestrator:(f()) Adding a Slave as the previous one crashed!")
             requests.post("http://localhost:80/api/v1/create/slave")
 
+        # This case is reached when a worker is created (or) deleted not according to the above case (Line 79)
         else:
             
             m=0
             lowest=-1
             corres_c=""
 
+            # We look at active znodes present in the list "ch" to check if a "master" exists.
+            # When creating a worker, everything is initially made into a "slave" and its znode-data is set to "slave"
+            # Here we compare the znode-data to check if any of the worker is the "master", if not, we make the slave with
+            # the lowest PID to run as the master.
             for c in ch:
                 print("Orchestrator:(f()) Iteration at 'c':",c," & type of 'c':",type(c))
                 
+                # We create the znode as "/orchestrator/worker,<PID of the worker>", hence we retrieve
+                # it the same way here. 'm_or_s' stores the znode-data to determine if it is a "master" or "slave"
                 d,s = zk.get("/orchestrator/"+c)
                 m_or_s = d.decode("utf-8").split(",")[0]
                 pid = int(d.decode("utf-8").split(",")[1])
-                #If data is not empty and data==master
+
+                # Checking whether a "master" exists
                 if(m_or_s == "master"):
                         m=1
                         print("Orchestrator:(f()) Master Exists!")
+                
+                # If "slave", finding to lowest PID and keeping track of it for "master" election
                 else:
                     if(lowest==-1):
                         lowest=pid
@@ -114,11 +116,14 @@ def f(ch):
                         lowest=pid
                         corres_c=c
                             
-            #Making the first node in the list as the master
-
+            # If "master" isn't present, making the lowest PID worker(slave) as the "master" and creating another "slave"
+            # at the end as the slave count is getting reduced by 1.
             if(m==0):
                 print("Orchestrator:(f()) As Master wasn't found, changing Slave to Master")
                 strin="master,"+str(lowest)
+                # We set the znode-data as "master" now (It was "slave" before). This triggers a znode event in the "worker"
+                # directly and makes it convert from a master to a slave. We also add the new master to the master_container_detail
+                # dictionary and remove the respective slave from slave_container_detail dictionary to keep track of everything.
                 zk.set("/orchestrator/"+corres_c,strin.encode('utf-8'))
                 print("Orchestrator:(f()) /orchestrator/"+corres_c+" is the New Master!")
                 master_container_detail[lowest] = slave_container_detail[lowest]
@@ -127,7 +132,7 @@ def f(ch):
 
 
 
-
+# This function is called by the "scaler", if it has to reduce the number of slaves as the request count is low.
 def crash_slave_scaler():
     global slave_container_detail
         
@@ -144,7 +149,8 @@ def crash_slave_scaler():
         
 
 
-
+# This function is called after every 2 minuters since the first request is received and scales it appropriately.
+# The number of requests received (count of only the necessary requests) is stored in a file called "request_count.json"
 def scaler():
     n=1
     with open("request_count.json","r") as file:
@@ -166,7 +172,6 @@ def scaler():
     run=1
     while(run):
         print()
-        #print("Length of slave_container_detail:",len(slave_container_detail))
         print("Orchestrator:(scaler()) master_container_detail:",master_container_detail)
         print("Orchestrator:(scaler()) slave_container_detail:",slave_container_detail)
 
@@ -282,11 +287,11 @@ class ResponseObject(object):
 
 
 
-
+# Any write request made is serviced here. Incase the first_request is a write request, it automatically starts the timer
+# and also creates one slave and one master(converted after being spawned as a slave first). [Initial Slaves are created only after the first request is received]
+# It returns the status code of the write operation back.
 @app.route("/api/v1/db/write",methods=["POST"])
 def write_db():
-    #access book name sent as JSON object
-    #in POST request body
     global first_request
     global slave_container_detail
     global master_container_detail
@@ -300,8 +305,10 @@ def write_db():
             count["total_requests"]=0
             json.dump(count,file)
 
+    # As there will be no workers running until the first request is received
     if(len(master_container_detail)==0 and len(slave_container_detail)==0):
-        #x = requests.post("http://localhost:80/api/v1/create/master")
+        # This creates only one slave, but this triggers a zookeeper event which makes this the master and spawns another slave.
+        # Hence we get an initial "master" and a "slave".
         print("Orchestrator:(write_db()) First Request Received, Spawning a Slave!")
         y = requests.post("http://localhost:80/api/v1/create/slave")
         if(y):
@@ -317,11 +324,12 @@ def write_db():
         json.dump(message,file)
 
     del(writeRespObj)
-    #rabbitMQwritecall(message)
     return res["status"]
 
 
-
+# Any read request made is serviced here. Incase the first_request is a read request, it automatically starts the timer
+# and also creates one slave and one master(converted after being spawned as a slave first). [Initial Slaves are created only after the first request is received]
+# It returns the appropriate response of the read operation back.
 @app.route("/api/v1/db/read",methods=["POST"])
 def read_db():
     global first_request
@@ -339,8 +347,10 @@ def read_db():
 
         return Response(status=400)
 
+    # As there will be no workers running until the first request is received
     if(len(master_container_detail)==0 and len(slave_container_detail)==0):
-        #x = requests.post("http://localhost:80/api/v1/create/master")
+        # This creates only one slave, but this triggers a zookeeper event which makes this the master and spawns another slave.
+        # Hence we get an initial "master" and a "slave".
         y = requests.post("http://localhost:80/api/v1/create/slave")
         if(y):
             print()
@@ -367,13 +377,10 @@ def read_db():
     del(respObj)
     print()
     print(" Orchestrator:(read_db()) Got Response for READ:%r and it's type is:%r" % (response,type(response)))
-	#rabbitMQreadcall(message)
     return response
 
 
-
-########################################## NON-API WRAPPED FUNCTIONS ############################
-
+# The API "/api/v1/crash/master" makes a call to this function to delete the "master". "ppid" is the PID of the existing "master" container.
 def master_delete_con(ppid):
     v=master_container_detail[ppid]
     v.remove(force= True)
@@ -382,6 +389,7 @@ def master_delete_con(ppid):
     master_container_detail.pop(ppid)
     return 200
 
+# The API "/api/v1/crash/slave" makes a call to this function to delete the "slave". "ppid" is the lowest PID "slave" container
 def slave_delete_con(ppid):
     global crash_pid_flag
     v=slave_container_detail[ppid]
@@ -392,33 +400,12 @@ def slave_delete_con(ppid):
     slave_container_detail.pop(ppid)
     return 200
 
-#################################################################################################
 
-# @app.route("/api/v1/create/master",methods=["POST"])
-# def create_con_master():
-#     #global slave_container_detail
-#     global master_container_detail
-#     client = docker.from_env()
-#     client.images.build(path=".", tag="master")    
-#     client.containers.create("master",detach=True)
-
-#     cont_id = os.popen("hostname").read().strip()
-#     print("Orchestrator Container ID:",cont_id)
-    
-#     v=client.containers.run("master",command="python worker.py 1",network='zookeeper_amqp_default',links={'rmq':'rmq'},detach=True,volumes_from=[cont_id])
-#     print ("New Master created!")
-#     #print("TOP ELEMENTS:",docker.top)
-#     #print("TOP ELEMENTS:",v.top())
-#     ppid = int(v.top()['Processes'][0][2])
-    
-#     master_container_detail[ppid]=v
-#     return "Created"
-
-	
+# This API is used to create a "slave" container. We have used Docker SDK to achieve this by going into the docker environment
+# (where all the containers i.e Zookeeper, RabbitMQ, Orchestrator, Workers are present) from the orchestrator environment to create them.
 @app.route("/api/v1/create/slave",methods=["POST"])
 def create_con_slave():
     global slave_container_detail
-    #global master_container_detail
     client = docker.from_env()
     client.images.build(path=".", tag="slave")    
     client.containers.create("slave",detach=True)
@@ -426,24 +413,23 @@ def create_con_slave():
     cont_id = os.popen("hostname").read().strip()
     print()
     print("Orchestrator:(create_con_slave()) Orchestrator's Container ID:",cont_id)
-    
-    #v=client.containers.run("slave",command="python worker.py",auto_remove=True,network='zookeeper_amqp_default',links={'rmq':'rmq','zoo':'zoo'},detach=True,volumes_from=[cont_id])
-
     v=client.containers.run("slave",command="python worker.py",network='orch_default',links={'rmq':'rmq'},detach=True,volumes_from=[cont_id])
-    #volumes={"/var/run/docker.sock":{"bind":"/var/run/docker.sock","mode":"rw"},{"/usr/bin/docker":{"bind":"/usr/bin/docker","mode":"rw"}}})
     print ("Orchestrator:(create_con_slave()) New Slave created!")
-    #print("TOP ELEMENTS:",docker.top)
-    #print("TOP ELEMENTS:",v.top())
     ppid = int(v.top()['Processes'][0][2])
     slave_container_detail[ppid]=v
     print("Orchestrator:(create_con_slave()) PPID is ",ppid)
     return "Created"
 
 
+'''
+PLEASE NOTE THAT THERE IS NO API TO CREATE A "MASTER" AS THE SLAVES THEMSELVES ARE MADE INTO THE MASTER IF NEEDED BY THE ZOOKEEPER EVENT.
+'''
 
+
+# This API is used to crash the "master" container. This API makes a call to the function "master_delete_con" along with the master's
+# PID to achieve this.
 @app.route("/api/v1/crash/master",methods=["POST"])
 def crash_master():
-    # global slave_container_detail
     global master_container_detail
     if(request.method=="POST"):
         for key in master_container_detail:
@@ -454,7 +440,8 @@ def crash_master():
     else:
         return Response(status=405)
 
-
+# This API is used to crash the "slave" container. This API makes a call to the function "slave_delete_con" along with the lowest slave's
+# PID to achieve this.
 @app.route("/api/v1/crash/slave", methods=["POST"])
 def crash_slave():
     global slave_container_detail
@@ -477,7 +464,9 @@ def crash_slave():
     else:
         return Response(status=405)
 
-
+# This API is used to list all the Worker's PID. These are stored in master_container_detail and slave_container_detail dictionaries.
+# Incase the first_request is a read request, it automatically starts the timer
+# and also creates one slave and one master(converted after being spawned as a slave first). [Initial Slaves are created only after the first request is received]
 @app.route("/api/v1/worker/list",methods=["GET"])
 def list_container_pid():
     global slave_container_detail
@@ -494,7 +483,6 @@ def list_container_pid():
                 json.dump(count,file)
 
         if(len(master_container_detail)==0 and len(slave_container_detail)==0):
-            #x = requests.post("http://localhost:80/api/v1/create/master")
             print("Orchestrator:(write_db()) First Request Received, Spawning a Slave!")
             y = requests.post("http://localhost:80/api/v1/create/slave")
             if(y):
@@ -508,6 +496,9 @@ def list_container_pid():
     else:
         return Response(status=405)
 
+# This API is used to clear the SQLite Database in every Worker Container.
+# Incase the first_request is a read request, it automatically starts the timer
+# and also creates one slave and one master(converted after being spawned as a slave first). [Initial Slaves are created only after the first request is received]
 @app.route("/api/v1/db/clear", methods=["POST"])
 def clear_db():
     global first_request
@@ -525,7 +516,6 @@ def clear_db():
                 json.dump(count,file)
 
         if(len(master_container_detail)==0 and len(slave_container_detail)==0):
-            #x = requests.post("http://localhost:80/api/v1/create/master")
             print("Orchestrator:(write_db()) First Request Received, Spawning a Slave!")
             y = requests.post("http://localhost:80/api/v1/create/slave")
             if(y):
@@ -538,19 +528,13 @@ def clear_db():
     else:
         return Response(status=405)
 
-######################################### FLASK PART ############################################
+
+
+######################################### STARTING THE FLASK APPLICATION ############################################
+
 if __name__=="__main__":
     
-
-    #create_con_master()
     app.run(host="0.0.0.0",port=80,debug=False)
 
-    
+#####################################################################################################################
 
-    
-#################################################################################################
-
-'''Changes Made:
---> Added auto_remove=True for creation
---> Removed time.sleep(2) from f()
-'''
