@@ -20,9 +20,9 @@ first_event_req=True
 
 logging.basicConfig()
 
+# Here we establish a connection with the Zookeeper Server.
 zk = KazooClient(hosts='zoo:2181')
 zk.start()
-
 zk.ensure_path("/orchestrator")
 
 
@@ -34,6 +34,9 @@ client = docker.from_env()
 container_obj = client.containers.get(str(cont_id))
 ppid = int(container_obj.top()['Processes'][0][2])
 wok = "worker,"+str(ppid)
+
+# We create a znode which is a part of "/orchestrator/" with its name being "worker,<PID of the container>"
+# We also set the znode-data as "slave" because it always runs as slave intially.
 zk.create("/orchestrator/"+wok, b"slave," + str(ppid).encode("utf-8"), ephemeral=True)
 
 
@@ -47,20 +50,13 @@ channel = connection.channel()
 updationQ=""
 
 
-
+# Every Worker has a unique database to itself whose name is "app_<Container ID>.db"
 path = "app_"+str(cont_id)+".db"
 
 
-ipaddr = "http://35.169.72.238"
-ipaddr_user = "http://34.236.8.161"
-ipaddr_ride = "http://3.208.45.172"
 
-
-
-
-
-#################################### FUNCTIONS NEEDED BY MAIN FUNCTIONS ##############################################
-
+# This function gets every query executed by "master" and also executes it in slave BEFORE its
+# creation to maintain consistency
 def creation_sync(query):
     with sqlite3.connect(path) as con:
         cur = con.cursor()
@@ -70,6 +66,8 @@ def creation_sync(query):
         cur.execute(q)
         print("Worker:(creation_sync()) Sync Query '"+q+"' Successfully executed")
 
+# This function gets every query executed by "master" and also executes it in slave AFTER its
+# creation to maintain consistency
 def updationQueryExecute(ch, method, props, body):
     with sqlite3.connect(path) as con:
         cur = con.cursor()
@@ -81,6 +79,12 @@ def updationQueryExecute(ch, method, props, body):
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
 
+
+
+################################################### CALLBACK FUNCTIONS ###############################################
+
+# This function is called when run_as_slave() receives a message from "readQ".
+# This function executes the query and publishes the appropriate retrieved message to the "responseQ" 
 def callbackread(ch, method, props, body):
     print()
     print("Worker:(callbackread()) READ CALLBACK CALLED!") 
@@ -98,76 +102,48 @@ def callbackread(ch, method, props, body):
         cols+=i
         if(l!=0):
             cols+=","
-    #print(cols)
-    #print(type(cols))
-    if(table=="users"):
-        ##print(type(p))
-        try:
 
-            '''    
-            Use this as the json data to send from the user's container
-            {
-                "table":"users",
-                "insert":["username"],
-                "where_flag":0
-            }
-            '''
+    if(table=="users"):
+        try:
             
             with sqlite3.connect(path) as con:
-                #return "table is %s, username is %s, password is %s"%(table,u,p)
                 cur = con.cursor()
-                #print("hi")
                 query="SELECT username from users"
         
-                #print(query)
                 cur.execute(query)
-                #print("hello")
                 con.commit()
                 status=201
                 for i in cur:
                     s = s + str(i[0]) + ","
-                    # #print(type(i))
-                #return jsonify({"string":s})
-                s=s[:-1]
-                '''
-                BROOOO SURYAAAAA, it returns it this way:
-
-                'Hari','Surya','JT','Rahul'
-                '''
-
+                s=s[:-1
                 print("Users List:",s)
 
         except:
                 print(e)
-               #return Response(status=400)
-    else:   #rides
+    else:
         try:
             with sqlite3.connect(path) as con:
-                #return "table is %s, username is %s, password is %s"%(table,u,p)
                 cur = con.cursor()
-                #print("BEFORE EXEC")
                 if(where_flag):
                     where=request["where"]
                     query="SELECT "+cols+" from rides WHERE "+where
                 else:
                     query="SELECT "+cols+" from rides"
-                #print(query)
                 cur.execute(query)
-                #print("AFTER EXEC")
                 con.commit()
                 status=201
                 
                 for i in cur:
                     s = s + str(i) + "\n"
-                #return jsonify({"string":s})
                 print("Either list_source_to_destination or list_details of rides:")
                 print(s)
                 
         except:
                 print(e)
-                #return Response(status=400)
 
     print(props)
+
+    # This is where we publish the response
     ch.basic_publish(exchange='',
             routing_key=props.reply_to,
             properties=pika.BasicProperties(correlation_id =props.correlation_id),
@@ -176,6 +152,8 @@ def callbackread(ch, method, props, body):
     print("[*] Sent Message from Slave: ",s)
     
 
+# This function is called when run_as_master() receives a message from "writeQ"
+# This function executes the query and publishes the appropriate status code to the "writeResponseQ" 
 def callbackwrite(ch, method, properties, body):
     print()
     print("Worker:(callbackwrite()) WRITE CALLBACK CALLED!")
@@ -183,17 +161,21 @@ def callbackwrite(ch, method, properties, body):
     print("JSONBODY IS:",request)
     join = request["join"]
     print("join is",join)
+
+    # join = 0 is for creation of rides or users.
+    # join = 1 is for joining a particular ride.
+    # join = 2 is for deleting a ride.
+    # join = 3 is for deleting a user.
+    # join = 4 is for deleting the database.
     if(join==0):
         table=request["table"]
         if(table=="users"):
-            ##print(type(p))
             try:
                 print("enter1")
                 with sqlite3.connect(path) as con:
                     print("enter2")
                     username=request["username"]
                     password=request["password"]
-                        #return "table is %s, username is %s, password is %s"%(table,u,p)
                     cur = con.cursor()
                     print("enter 2.5")
                     q="INSERT into users values ('"+username+"','"+password+"')"
@@ -211,7 +193,6 @@ def callbackwrite(ch, method, properties, body):
                         routing_key=properties.reply_to,
                         properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                         body=json.dumps(s))
-                    #return Response(status=201)
             except Exception as e:
                 s = {"status":"400"}
                 print(e)
@@ -220,7 +201,6 @@ def callbackwrite(ch, method, properties, body):
                         properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                         body=json.dumps(s))
                 
-                #return Response(status=400)
 
 
         if(table=="rides"):
@@ -237,23 +217,14 @@ def callbackwrite(ch, method, properties, body):
                 with sqlite3.connect(path) as con:
 
                     cur = con.cursor()
-                    #cur.execute("DELETE FROM rides WHERE created_by=\"'hk'\"")
-                    ##print("\nBefore Insertion\n")
-                    #query="INSERT INTO rides (rideId,created_by, ride_users, timestamp, source, destination) values (None," + "'" + created_by + "'" + "," +  "'" + ride_users + "'" + "," + "'" + timestamp + "'" + "," + "'" + source + "'" + "," + "'" + destination + "'" + ")"
-                    ##print(query)
-                    
-                    #print(created_by,timestamp,source,destination)
                     n=cur.execute("SELECT max(rideId) FROM rides").fetchone()[0]
                     if(n==None):
-                        #print("Inside")
                         m=0
                     else:
                         m = n
-                    #m=cur.fetchone()[0]
 
                     print(m)
                     cur.execute("INSERT into rides (rideId,created_by,ride_users,timestamp,source,destination) values (?,?,?,?,?,?)",(m+1,created_by,ride_users,timestamp,source,destination))
-                    # print("Surya")
                     q="INSERT into rides (rideId,created_by,ride_users,timestamp,source,destination) values ("+str(m+1)+",'"+created_by+"','"+ride_users+"','"+timestamp+"','"+source+"','"+destination+"')"      
                     
                     ch.basic_publish(exchange='fan', routing_key='', body=q)
@@ -268,7 +239,6 @@ def callbackwrite(ch, method, properties, body):
 
                     con.commit()
                     status=201
-                    #return Response(status=201)
             except Exception as e:
                 s = {"status":"400"}
 
@@ -277,7 +247,6 @@ def callbackwrite(ch, method, properties, body):
                         properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                         body=json.dumps(s))
                 print(e)
-                #return Response(status=400)
 
     if(join==1):
         try:
@@ -287,17 +256,11 @@ def callbackwrite(ch, method, properties, body):
 
                 print(username)
                 u=""
-                #check_rides_q = "SELECT COUNT(*) FROM rides WHERE rideId"+str(rideId)
 
                 cur = con.cursor()
 
-                '''
-                query="UPDATE rides SET ride_users="+"'hari'"+" WHERE rideId=1"
-                cur.execute(query)
-                '''
                 cur.execute("SELECT count(*) FROM rides WHERE rideId="+str(rideId))
                 ride_flag=cur.fetchone()[0]
-                #cur.execute("SELECT count(*) FROM users WHERE username="+"'"+str(username)+"'")
                 user_flag=1
                 con.commit()
 
@@ -326,7 +289,6 @@ def callbackwrite(ch, method, properties, body):
                             routing_key=properties.reply_to,
                             properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                             body=json.dumps(s))
-                        #return Response(status=200)
                         print("Joined Ride!")
 
                     else:
@@ -336,7 +298,6 @@ def callbackwrite(ch, method, properties, body):
                             routing_key=properties.reply_to,
                             properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                             body=json.dumps(s))
-                        #return Response(status=400)
                         print("Duplicate User!")
                 else:
                     s = {"status":"400"}
@@ -346,7 +307,6 @@ def callbackwrite(ch, method, properties, body):
                         properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                         body=json.dumps(s))
                     print("Ride doesn't exist!")
-                    #return Response(status=400)
         except Exception as e:
             s = {"status":"405"}
 
@@ -355,7 +315,6 @@ def callbackwrite(ch, method, properties, body):
                     properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                     body=json.dumps(s))
             print(e)
-            #return Response(status=405)
         
 
 
@@ -383,7 +342,6 @@ def callbackwrite(ch, method, properties, body):
                             body=json.dumps(s))
 
                         print("Ride Deleted Successfully")
-                        #return Response(status=200)
                     else:
                         s = {"status":"400"}
 
@@ -392,7 +350,6 @@ def callbackwrite(ch, method, properties, body):
                             properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                             body=json.dumps(s))
                         print("Ride doesn't exist!")
-                        #return Response(status=400)
         except Exception as e:
             s = {"status":"500"}
 
@@ -401,13 +358,11 @@ def callbackwrite(ch, method, properties, body):
                     properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                     body=json.dumps(s))
             print(e)
-            #return Response(status=405)
 
 
     if(join==3):
         try:
                 with sqlite3.connect(path) as con:
-                    #print("Connected")
                     username = request["username"]
                     cur = con.cursor()
                     cur.execute("SELECT count(*) FROM users where username="+"'"+str(username)+"'")
@@ -416,7 +371,6 @@ def callbackwrite(ch, method, properties, body):
                     if(user_flag):
                         q = "DELETE FROM users WHERE username="+"'"+str(username)+"'"
                         cur.execute(q)
-                        #print("Executed")
                         con.commit()
 
                         ch.basic_publish(exchange='fan', routing_key='', body=q)
@@ -429,7 +383,6 @@ def callbackwrite(ch, method, properties, body):
                             properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                             body=json.dumps(s))
                         print("User Deleted Successfully!")
-                        #return Response(status=200)
                     else:
                         s = {"status":"400"}
 
@@ -438,7 +391,6 @@ def callbackwrite(ch, method, properties, body):
                             properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                             body=json.dumps(s))
                         print("User doesn't exist!")
-                        #return Response(status=400)
         except Exception as e:
             s = {"status":"400"}
             print(e)
@@ -447,7 +399,6 @@ def callbackwrite(ch, method, properties, body):
                     properties=pika.BasicProperties(correlation_id =properties.correlation_id),
                     body=json.dumps(s))
             
-            #eturn Response(status=400)
     if(join==4):
         try:
             with sqlite3.connect(path) as con:
@@ -480,14 +431,15 @@ def callbackwrite(ch, method, properties, body):
 
     ch.basic_ack(delivery_tag = method.delivery_tag)
 
-
 ######################################################################################################################
-
-
 
 
 ##################################################### MAIN FUNCTIONS #################################################
 
+
+# This API is called intially called once the Worker container is made and makes it act like a slave. It establishes
+# connections with the "syncQ", "updationQ","fan(exchange)","readQ","responseQ". It then starts consuming read requests
+# from the "readQ" and publishes the appropriate response onto the "responseQ" 
 def run_as_slave():
     global updationQ
     global connection
@@ -504,7 +456,12 @@ def run_as_slave():
     print()
     print("Worker:(run_as_slave()) Running as Slave!")
     
-
+    # Here we establish a connection to the syncQ which stores all the write requests made so far, and 
+    # we call the creation_sync() function which synchronises the database.
+    # Whenever a slave is created, it initially connects to the “syncQ” to execute all the requests that 
+    # were received to the “writeQ” (master) without sending back an acknowledge which makes the state of 
+    # every request in the “syncQ” as “Not Acknowledged”. We then close the connection between the “syncQ” 
+    # and the new slave which then changes the state of all the requests back to “ready” state for consumption again. 
     try:
         syncChannel = connection.channel()
         ret = syncChannel.queue_declare(queue='syncQ', durable=True)
@@ -522,10 +479,13 @@ def run_as_slave():
         print("run_as_slave [syncing] EXCEPTION!")
         print("---------------------------------------------")
 
+    # Here we establish a connection with the updationQ which is connected to a "fan" exchange.
+    # This is used to immediately get the write message that was used by the master to maintain
+    # consistency. Each Slave has its own updationQ.
     try:
         updationQ = "updationQ_"+str(cont_id)
         channel.queue_declare(queue='readQ', durable=True)
-        channel.queue_declare(queue=updationQ, durable=True) #auto_delete=True)
+        channel.queue_declare(queue=updationQ, durable=True)
         print('Worker:(run_as_slave()) UpdationQ created as:',updationQ)
         channel.exchange_declare(exchange='fan',exchange_type='fanout')
         channel.queue_bind(exchange='fan',queue=updationQ)
@@ -535,13 +495,13 @@ def run_as_slave():
         print("run_as_slave [updationQ creation] EXCEPTION!")
         print("---------------------------------------------")
     
+    # Start consuming from the updationQ
     try:
         channel.basic_consume(queue=updationQ, on_message_callback=updationQueryExecute)
     except:
         print("---------------------------------------------")
         print("run_as_slave [updationQ] EXCEPTION!")
         print("---------------------------------------------")
-    # channel.queue_declare(queue='syncQ', durable=True)
     
     print('Worker:(run_as_slave()) Reading Messages Now!')
     
@@ -552,7 +512,7 @@ def run_as_slave():
         print("run_as_slave [readQ] EXCEPTION!")
         print("---------------------------------------------")
 
-
+    # Start consuming from the updationQ
     try:
         channel.start_consuming()
     except:
@@ -563,7 +523,10 @@ def run_as_slave():
 
 
 
-#Delete all existing connections of slave, convert slave to a master.
+# When this is called, it means that a "slave" is to be converted into a "master". Hence it deletes all the 
+# existing connections it established as a slave (like with the "readQ","responseQ","fan(exchange)","synQ","updationQ") 
+# and converts the slave to a master. It then initialises or re-initialises its connection to a "writeQ",
+# "writeResponseQ","fan(exchange)" and "syncQ". It now starts to work as a "master"
 def run_as_master():
     global updationQ
     global connection
@@ -574,7 +537,6 @@ def run_as_master():
         print("Worker:(run_as_master()) Running as Master!")
         channel.queue_unbind(queue=updationQ,exchange='fan')
         channel.queue_delete(queue=updationQ,if_unused=False,if_empty=False)
-
         connection.close()
 
     except:
@@ -592,8 +554,9 @@ def run_as_master():
     master_channel.queue_declare(queue='writeResponseQ', durable=True)
     master_channel.exchange_declare(exchange='fan',exchange_type='fanout')
     master_channel.queue_declare(queue='syncQ',durable=True)
-    # channel.queue_declare(queue='syncQ', durable=True)
     print(' Worker:(run_as_master()) Waiting for messages.')
+    
+    # Start consuming from the writeQ
     master_channel.basic_consume(queue='writeQ', on_message_callback=callbackwrite)
     master_channel.start_consuming()
     print("---------------------------------------------")
@@ -614,6 +577,9 @@ def run_as_master():
 
 ################################################# ZOOKEEPER EVENT ###################################################
 
+# This zookeeper event watches for a data change in "znode-data". Initially, every znode-data invoked inside a worker 
+# is set to "slave", which might be modified in the "Orchestrator" in case of "master" election. When this happens
+# this watch detects the change, calls the run_as_master() function which converts the "slave" to a "master". 
 @zk.DataWatch("/orchestrator/"+wok)
 def data_change(data,stat,event):
     global first_event_req
@@ -630,19 +596,15 @@ def data_change(data,stat,event):
         print("Worker:(data_change()) The Data is:",data)
         print("Worker:(data_change()) The Stat is:",stat)
         print("Worker:(data_change()) The Event is:",event)
-        # process.terminate()
         run_as_master()
         return False
 
 
 
-######################################################################################################################
+##################################################   MAIN   ##########################################################
 
 if __name__ == '__main__':
-
-    # process = multiprocessing.Process(target=run_as_slave, args=())
-    # process.start()
-    print("MAIN IS USELESS ______")
+    # Initially, every worker is made to run as a Slave, which is later converted to a master, if needed.
     run_as_slave()
     
-    
+######################################################################################################################    
