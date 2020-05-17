@@ -153,7 +153,8 @@ def callbackread(ch, method, props, body):
     
 
 # This function is called when run_as_master() receives a message from "writeQ"
-# This function executes the query and publishes the appropriate status code to the "writeResponseQ" 
+# This function executes the query and publishes the appropriate status code to the "writeResponseQ".
+# It also writes the write message to the "fan(exchange)" and also the "syncQ"
 def callbackwrite(ch, method, properties, body):
     print()
     print("Worker:(callbackwrite()) WRITE CALLBACK CALLED!")
