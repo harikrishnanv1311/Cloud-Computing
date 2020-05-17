@@ -21,8 +21,6 @@ CORS(app)
 # Function to check date
 
 def check_date(date):
-    #29-01-2020:30-20-18
-    ##print(date)
     rem_quotes=date.replace("'","")
     rep_date=rem_quotes.replace(":","-").split("-")
     ##print(rep_date)
