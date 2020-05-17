@@ -189,12 +189,9 @@ def scaler():
                 
         
 
-    
-
-
-                
-
-
+# The write API makes an object of this class for every write. This establishes a connection with RabbitMQ Server, declares
+# (if not already created) and connects to the "writeQ", "writeResponseQ".
+# "writeQ" holds every write request as a message, while "writeResponseQ" holds the status code after attempting the write call.
 class writeResponseObject(object):
 
     def __init__(self):
@@ -240,7 +237,9 @@ class writeResponseObject(object):
 
 
 
-
+# The read API makes an object of this class for every read. This establishes a connection with RabbitMQ Server, declares
+# (if not already created) and connects to the "readQ", "responseQ".
+# "readQ" holds every read request as a message, while "responseQ" holds the response of the read call.
 class ResponseObject(object):
 
     def __init__(self):
